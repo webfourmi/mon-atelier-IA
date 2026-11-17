@@ -1,6 +1,6 @@
 (function (root) {
   'use strict';
-  const VERSION = '3.3.0';
+  const VERSION = '3.4.0';
   const KEY = 'atelier-ia-v1';
   const uid = () => globalThis.crypto?.randomUUID?.() || 'a-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2);
   const text = v => typeof v === 'string' ? v : (typeof v === 'number' ? String(v) : '');
@@ -51,12 +51,14 @@
     q.projectType=['general','educational','game','articles','professional'].includes(p.projectType)?p.projectType:'general';
     if(p.memory&&typeof p.memory==='object')q.memory={...p.memory,specification:typeof p.memory.specification==='string'?p.memory.specification:q.context,features:(Array.isArray(p.memory.features)?p.memory.features:[]).filter(f=>f&&typeof f==='object').map(f=>({...f,id:text(f.id)||uid(),title:text(f.title),description:text(f.description),areas:text(f.areas),checks:text(f.checks)})),issues:(Array.isArray(p.memory.issues)?p.memory.issues:[]).filter(x=>x&&typeof x==='object').map(x=>({...x,id:text(x.id)||uid(),title:text(x.title),detail:text(x.detail),open:x.open!==false}))};
     if(Array.isArray(p.releases))q.releases=p.releases.filter(r=>r&&typeof r==='object').map(r=>({...r,id:text(r.id)||uid(),version:text(r.version)}));
+    q.workflowRuns=Array.isArray(p.workflowRuns)?p.workflowRuns.map(r=>{if(!r||typeof r!=='object'||!Array.isArray(r.taskIds)||!r.workflow)throw Error('Une équipe enregistrée est invalide.');return {...r,id:text(r.id)||uid(),request:text(r.request),taskIds:r.taskIds.map(text),workflow:root.AtelierCore?.normalizeWorkflow?root.AtelierCore.normalizeWorkflow(r.workflow):clone(r.workflow)};}):[];
     q.activeVersion=text(p.activeVersion);
     return q;
   }
   function normalizeState(raw) {
     if (!raw || typeof raw!=='object' || !Array.isArray(raw.projects) || !Array.isArray(raw.prompts) || !Array.isArray(raw.comparisons)) throw Error('Format de sauvegarde non reconnu.');
     const out={...raw,preferences:{...raw.preferences,detailMode:raw.preferences?.detailMode==='advanced'?'advanced':'beginner'},schemaVersion:3,projects:raw.projects.map(normalizeProject),prompts:raw.prompts.map(p=>({...p,id:text(p.id)||uid(),title:text(p.title)||'Prompt',text:text(p.text)})),comparisons:raw.comparisons.map(c=>({...c,id:text(c.id)||uid(),title:text(c.title)||'Comparaison',a:text(c.a),b:text(c.b),date:text(c.date)})),updatedAt:text(raw.updatedAt)};
+    out.workflows=root.AtelierCore?.normalizeWorkflows?root.AtelierCore.normalizeWorkflows(raw.workflows):(Array.isArray(raw.workflows)?clone(raw.workflows):[]);
     for(const group of [out.projects,out.prompts,out.comparisons]) { const ids=new Set(); for(const x of group){if(ids.has(x.id))x.id=uid();ids.add(x.id);} }
     return out;
   }
@@ -182,6 +184,7 @@
   function nextSuggestions(p) {
     const list=[];
     for(const t of p.workItems) {
+      if(t.workflowRunId&&t.workflowStepIndex<t.workflowStepCount-1)continue;
       if(!isValidated(t)||t.blocked||dependencyIssues(p,t).length)continue;
       const nextRole=['design','contenus','medias','usages'].includes(t.role)?'programmation':t.role==='programmation'?'tests':t.role==='tests'?'livraison':'';
       if(!nextRole)continue;

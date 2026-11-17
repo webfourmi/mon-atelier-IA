@@ -1,10 +1,10 @@
-# Mon Atelier IA · V3.3 — mémoire et vérifications
+# Mon Atelier IA · V3.4 — équipes IA et circuits
 
 Un atelier personnel pour organiser les projets menés avec ChatGPT et Claude : dix postes de travail, un dossier commun et un suivi clair des tâches, décisions, fichiers et versions.
 
 ## Démarrer sur ordinateur
 
-Télécharger les fichiers du dépôt, décompresser le dossier, puis ouvrir **index.html** dans Chrome, Edge ou Firefox. Garder `styles.css`, `core.js`, `planning.js`, `github.js` et `app.js` à côté de `index.html`.
+Télécharger les fichiers du dépôt, décompresser le dossier, puis ouvrir **index.html** dans Chrome, Edge ou Firefox. Garder `styles.css`, `core.js`, `planning.js`, `workflows.js`, `github.js` et `app.js` à côté de `index.html`.
 
 Aucune installation ni API IA payante n’est nécessaire pour utiliser l’application. GitHub nécessite une connexion Internet. Les échanges avec les IA se font par copie du contexte et ajout manuel des pièces jointes.
 
@@ -197,3 +197,31 @@ Le lien GitHub permet de retrouver le commit/tag/version. Le téléchargement de
 Le contrôle des originaux doit être renouvelé après réouverture de l’atelier ou changement des fichiers. Un lien GitHub ou un résultat modifié rend la confirmation d’intégration périmée. L’indicateur de préparation tient compte des oublis bloquants ; les problèmes « à surveiller » restent visibles sans être bloquants. Les confirmations personnelles de préparation doivent être renouvelées après modification des preuves de régression.
 
 Ce tableau ne remplace pas les tests et ne prouve pas que le contenu d’un commit correspond à un résultat décrit. Il ne fusionne et ne publie rien. Les fonctions GitHub et les sauvegardes précédentes sont préservées. Voir [RAPPORT-V3.3.md](RAPPORT-V3.3.md).
+
+
+## V3.4 — équipes IA par type de tâche
+
+**Circuits IA** permet d’enregistrer des équipes de travail communes à tous les projets. Quatre exemples modifiables sont fournis : développement, correction, contenus et médias. Les répartitions ChatGPT/Claude sont des points de départ, pas un classement de leurs capacités.
+
+Un circuit comporte de **1 à 10 étapes ordonnées**, chacune avec un intitulé, un poste, un intervenant (**ChatGPT, Claude ou Moi**), une consigne, un livrable et des critères. Deux étapes peuvent employer le même poste avec des IA différentes. Créer, modifier, ajouter/retirer/réordonner des étapes et dupliquer un modèle ; l’archivage est réversible.
+
+### Préparer une équipe
+
+1. Choisir **Utiliser pour ce projet** et décrire une nouvelle demande, ou sélectionner une tâche non commencée.
+2. Relire l’aperçu des étapes et confirmer leur création. Rien n’est ajouté avant cette confirmation.
+3. Ouvrir les tâches créées ou préparer leur prompt depuis la liste de l’équipe. Le destinataire reprend l’intervenant prévu pour l’étape, même s’il diffère de la recommandation habituelle du poste.
+4. Copier le prompt dans l’IA, importer le résultat, puis vérifier et valider la tâche. L’étape suivante dépend de cette validation. Un prérequis non validé bloque le démarrage et la clôture ; son prompt peut néanmoins être préparé avec l’indication d’attente.
+
+Le prompt comprend la consigne de l’étape et, une fois validé, le résultat de l’étape précédente du même circuit. Il ne reprend pas toute la mémoire du projet. Les longs résultats sont limités à un extrait de 6 000 caractères, signalé comme tel ; les pièces jointes restent à transmettre manuellement.
+
+### Tâche existante et préservation
+
+Une tâche existante ne peut être réaffectée à une équipe que si elle est À préparer/Prêt, sans résultat, preuve, mission archivée ni circuit antérieur. La première étape reprend son titre, objectif, fichiers et prérequis ; son poste, son intervenant et son livrable sont adaptés au circuit, les critères sont complétés. Sa fiche d’origine est conservée dans l’équipe. L’aperçu devient invalide si cette fiche change avant confirmation.
+
+Les autres étapes sont de nouvelles tâches liées dans l’ordre. Les suggestions générales ne s’intercalent pas entre les étapes d’un circuit ; elles peuvent reprendre après sa dernière étape validée.
+
+Chaque équipe conserve une copie du modèle utilisé. Modifier/archiver le modèle ne change donc pas les équipes déjà créées. **Réutiliser cette équipe** prépare une nouvelle demande à partir de cette copie, même depuis un projet importé.
+
+La bibliothèque des circuits est incluse dans la sauvegarde complète de l’atelier. L’export de projet conserve les équipes utilisées et leurs étapes, mais pas toute la bibliothèque globale ; ces copies restent réutilisables. Le dossier commun partagé garde sa portée de références validées. La restauration conserve aussi les liens entre tâches, fiches d’origine et pièces jointes réidentifiées.
+
+Les circuits organisent des relais séquentiels. Ils ne lancent pas plusieurs IA automatiquement, n’envoient aucun message et ne nécessitent aucune API payante. Voir [RAPPORT-V3.4.md](RAPPORT-V3.4.md).

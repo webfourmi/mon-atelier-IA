@@ -3,6 +3,7 @@ const assert=require('node:assert/strict');
 const fs=require('node:fs');
 const C=require('../core.js');
 require('../planning.js');
+require('../workflows.js');
 const GitHub=require('../github.js');
 
 test('V1 migration keeps projects, text, prompts, comparisons and unknown project data',()=>{
