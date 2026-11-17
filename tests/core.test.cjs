@@ -102,3 +102,25 @@ test('V3.1 shared dossier keeps the dependency chain and revalidation rules',()=
   const received=C.applyShared(other,C.sharedPayload(p));assert.deepEqual(received.workItems.find(t=>t.id==='b').dependsOn,['a']);assert.equal(C.completedTasks(received).length,2);
   received.workItems.find(t=>t.id==='a').status='review';C.reconcileDependencies(received);assert.equal(received.workItems.find(t=>t.id==='b').status,'review');assert.equal(C.completedTasks(received).length,0);
 });
+
+
+test('V3.2 modes normalize without removing data or unknown preferences',()=>{
+  const raw=C.starter();raw.preferences={detailMode:'advanced',custom:'conservé'};raw.projects[0].handoffs=[{id:'old',title:'Ancienne mission',to:'Claude',rating:5,result:'Conservé'}];
+  const n=C.normalizeState(raw);assert.equal(n.preferences.detailMode,'advanced');assert.equal(n.preferences.custom,'conservé');assert.equal(n.projects[0].handoffs[0].rating,5);assert.equal(C.normalizeState({...raw,preferences:{detailMode:'inconnu'}}).preferences.detailMode,'beginner');assert.deepEqual(C.normalizeState(n),n);
+});
+function evaluationFixture(){return C.normalizeProject({name:'Évaluations',handoffs:[
+  {id:'a',title:'Mission A',to:'ChatGPT',role:'programmation',outcome:'done',result:'Résultat A',rating:4,evaluatedAt:'2026-11-17T10:00:00Z'},
+  {id:'b',title:'Mission B',to:'ChatGPT',role:'tests',outcome:'partial',result:'Résultat B',rating:0,evaluatedAt:'2026-11-17T11:00:00Z'},
+  {id:'c',title:'Mission C',to:'Claude',role:'tests',outcome:'failed',result:'Résultat C',rating:2,evaluatedAt:'2026-11-17T12:00:00Z'},
+  {id:'pending',title:'Attente',to:'ChatGPT',outcome:'pending',rating:5,result:'Pas encore contrôlé',evaluatedAt:'2026-11-17T12:00:00Z'},
+  {id:'legacy',title:'Ancienne note',to:'Claude',outcome:'done',rating:5,result:'Ancien'},
+  {id:'empty',title:'Sans résultat',to:'Claude',outcome:'done',rating:5,evaluatedAt:'2026-11-17T12:00:00Z'},
+  {id:'invalid',title:'Sans date valide',to:'Claude',outcome:'done',result:'Invalide',rating:5,evaluatedAt:'inconnue'},
+  {id:'human',title:'Travail humain',to:'Moi',outcome:'done',result:'Humain',rating:5,evaluatedAt:'2026-11-17T12:00:00Z'}]});}
+test('V3.2 AI denominators use evaluated missions and optional ratings correctly',()=>{
+  const p=evaluationFixture(),[g,c]=C.missionStats(p);assert.equal(g.total,3);assert.equal(g.evaluated,2);assert.equal(g.excluded,1);assert.equal(g.rated,1);assert.equal(g.average,4);assert.equal(g.successRate,50);assert.equal(c.evaluated,1);assert.equal(c.average,2);assert.equal(c.failed,1);assert.equal(c.excluded,3);
+  assert.equal(C.missionStats(p,'programmation','ChatGPT')[0].evaluated,1);assert.equal(C.missionStats(p,'unassigned','Claude')[0].evaluated,0);assert.equal(C.missionStats(p,'design')[0].average,null);
+});
+test('V3.2 exported AI report is auditable and excludes incomplete evaluations',()=>{
+  const report=C.missionReport(evaluationFixture(),'tests','ChatGPT');assert(report.includes('Mission B [b]'));assert(!report.includes('Mission A'));assert(!report.includes('Ancienne note'));assert(!report.includes('Attente'));assert(report.includes('1 évaluée(s) / 1 archivée(s)'));assert(report.includes('Non notée'));
+});

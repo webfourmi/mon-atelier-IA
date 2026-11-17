@@ -36,7 +36,7 @@ async function newTask(env,{title,role='programmation',status='ready',blocked=''
   await env.click('[data-action="new-task"]');env.fill('#taskTitle',title);env.fill('#taskRole',role);env.fill('#taskStatus',status);env.fill('#taskDeliverable','Un résultat concret');env.fill('#taskCriteria','Un contrôle observable');env.fill('#taskBlocked',blocked);if(depends){env.$('#taskDeps').value=depends;}await env.submit('#editorForm');
 }
 
-test('boot: dashboard, ten roles, documents and all navigation pages',async()=>{const e=await setup();try{assert.equal(e.state().projects.length,3);await e.nav('postes');assert.equal(e.$('#main').querySelectorAll('.role-card').length,10);for(const page of ['taches','dossier','transmissions','decisions','github','livraison','prompts','comparateur','sauvegardes','pilotage']){await e.nav(page);assert(e.$('h1')?.textContent,page);}assert.equal(e.$('#notice').hidden,true);}finally{await e.close();}});
+test('boot: dashboard, ten roles, documents and all navigation pages',async()=>{const e=await setup();try{assert.equal(e.state().projects.length,3);await e.nav('postes');assert.equal(e.$('#main').querySelectorAll('.role-card').length,10);for(const page of ['taches','dossier','transmissions','decisions','github','livraison','bilans','prompts','comparateur','sauvegardes','pilotage']){await e.nav(page);assert(e.$('h1')?.textContent,page);}assert.equal(e.$('#notice').hidden,true);}finally{await e.close();}});
 test('migration and autosave preserve V1, create backup, survive restart',async()=>{const raw=legacy(),e=await setup(raw);let saved;try{const data=e.state();assert.equal(data.projects[0].context,raw.projects[0].context);assert.deepEqual(JSON.parse(e.window.localStorage.getItem('atelier-ia-before-v2')),raw);assert.equal(data.prompts[0].text,'À conserver');assert.equal(data.comparisons[0].a,'Réponse A');await e.nav('dossier');e.fill('#projectContext','Contexte enrichi sans perdre les données');saved=e.state();assert.equal(saved.projects[0].context,'Contexte enrichi sans perdre les données');assert(e.window.localStorage.getItem('atelier-ia-snapshots-v2'));}finally{await e.close();}const restarted=await setup(saved);try{assert.equal(restarted.state().projects[0].context,'Contexte enrichi sans perdre les données');assert.equal(restarted.state().projects[0].workItems.length,1);}finally{await restarted.close();}});
 async function returnAndReview(e,id){
   await e.click('[data-action="edit-task"][data-id="'+id+'"]');
@@ -137,4 +137,23 @@ test('V3.1 GitHub assistant handles partial reads without writes or false succes
     if(url.includes('/pulls?'))return apiResponse(200,[{number:12,title:'Sauvegarde',head:{ref:'feature/sauvegarde'},base:{ref:'main'},draft:true}]);
     if(url.includes('/check-runs'))return apiResponse(403,{});if(url.endsWith('/status'))return apiResponse(200,{statuses:[]});if(url.endsWith('/releases/latest'))return apiResponse(404,{});throw Error('Unexpected URL '+url);
   });try{await e.nav('github');await e.click('[data-action="github-overview"]');assert(e.$('#main').textContent.includes('Contrôles non confirmés'));assert(e.$('#main').textContent.includes('Accès refusé'));assert(e.$('#main').textContent.includes('#12'));assert(calls.every(x=>x==='GET'));}finally{await e.close();}
+});
+
+
+test('V3.2 mode switch preserves data, exposes advanced tools and survives backup restore',async()=>{
+  const e=await setup(continuityFixture());let backup;try{
+    assert.equal(e.$('#detailMode').value,'beginner');assert(e.$('.nav-more'));await e.nav('taches');assert(e.$('.task-list'));await e.click('[data-action="edit-task"][data-id="program"]');assert(!e.$('.detail-options').open);assert.equal(e.$('#taskWorkBranch').value,'feature/sauvegarde');await e.submit('#editorForm');assert.equal(e.state().projects[0].workItems[0].workBranch,'feature/sauvegarde');
+    e.fill('#detailMode','advanced','change');assert.equal(e.state().preferences.detailMode,'advanced');assert.equal(e.$('.nav-more'),null);assert(e.$('.board'));await e.click('[data-action="edit-task"][data-id="program"]');assert(e.$('.detail-options').open);await e.click('[data-action="close-dialog"]');
+    await e.click('[data-action="export-all"]');backup=JSON.parse(await e.downloads.at(-1).blob.text());
+    e.fill('#detailMode','beginner','change');e.fill('#pageJump','postes','change');await tick();assert.equal(e.window.location.hash,'#postes');assert(e.$('.nav-more').open);assert.equal(e.$('#pageJump').value,'postes');
+  }finally{await e.close();}
+  const restored=await setup();try{await restored.nav('sauvegardes');await restored.click('[data-action="import-all"]');await restored.upload('#importFile','backup.json',JSON.stringify(backup),'application/json');assert.equal(restored.$('#detailMode').value,'advanced');assert.equal(restored.state().projects[0].workItems[0].workBranch,'feature/sauvegarde');}finally{await restored.close();}
+});
+
+test('V3.2 evaluating, correcting and reopening a mission recomputes AI report',async()=>{
+  const raw=legacy();raw.projects[0].handoffs=[{id:'mission',title:'Évaluation réelle',role:'tests',to:'Claude',from:'Moi',content:'Consigne',date:'2026-11-17T10:00:00Z',outcome:'pending',rating:0,result:''}];const e=await setup(raw);try{
+    await e.nav('bilans');assert(e.$('#main').textContent.includes('0 mission(s) évaluée(s)'));e.fill('#bilanView','excluded','change');await e.click('[data-action="edit-mission"][data-id="mission"]');e.fill('#missionOutcome','done');await e.submit('#editorForm');assert(e.$('#toast').textContent.includes('Décris le résultat'));assert.equal(e.state().projects[0].handoffs[0].outcome,'pending');e.fill('#missionResult','Livrable contrôlé');e.fill('#missionRating','4');await e.submit('#editorForm');
+    e.fill('#bilanView','evaluated','change');assert(e.$('#main').textContent.includes('4.0/5 sur 1'));await e.click('[data-action="export-bilan"]');const report=await e.downloads.at(-1).blob.text();assert(report.includes('Évaluation réelle [mission]'));assert(report.includes('Livrable contrôlé'));
+    await e.click('[data-action="edit-mission"][data-id="mission"]');e.fill('#missionOutcome','pending');await e.submit('#editorForm');assert.equal(e.state().projects[0].handoffs[0].evaluatedAt,'');assert(e.$('#main').textContent.includes('Aucune note exploitable'));
+  }finally{await e.close();}
 });
