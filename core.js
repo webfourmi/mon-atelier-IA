@@ -1,6 +1,6 @@
 (function (root) {
   'use strict';
-  const VERSION = '3.1.0';
+  const VERSION = '3.2.0';
   const KEY = 'atelier-ia-v1';
   const uid = () => globalThis.crypto?.randomUUID?.() || 'a-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2);
   const text = v => typeof v === 'string' ? v : (typeof v === 'number' ? String(v) : '');
@@ -53,7 +53,7 @@
   }
   function normalizeState(raw) {
     if (!raw || typeof raw!=='object' || !Array.isArray(raw.projects) || !Array.isArray(raw.prompts) || !Array.isArray(raw.comparisons)) throw Error('Format de sauvegarde non reconnu.');
-    const out={...raw,schemaVersion:3,projects:raw.projects.map(normalizeProject),prompts:raw.prompts.map(p=>({...p,id:text(p.id)||uid(),title:text(p.title)||'Prompt',text:text(p.text)})),comparisons:raw.comparisons.map(c=>({...c,id:text(c.id)||uid(),title:text(c.title)||'Comparaison',a:text(c.a),b:text(c.b),date:text(c.date)})),updatedAt:text(raw.updatedAt)};
+    const out={...raw,preferences:{...raw.preferences,detailMode:raw.preferences?.detailMode==='advanced'?'advanced':'beginner'},schemaVersion:3,projects:raw.projects.map(normalizeProject),prompts:raw.prompts.map(p=>({...p,id:text(p.id)||uid(),title:text(p.title)||'Prompt',text:text(p.text)})),comparisons:raw.comparisons.map(c=>({...c,id:text(c.id)||uid(),title:text(c.title)||'Comparaison',a:text(c.a),b:text(c.b),date:text(c.date)})),updatedAt:text(raw.updatedAt)};
     for(const group of [out.projects,out.prompts,out.comparisons]) { const ids=new Set(); for(const x of group){if(ids.has(x.id))x.id=uid();ids.add(x.id);} }
     return out;
   }
@@ -230,7 +230,25 @@
     }
     const size=central.reduce((n,c)=>n+c.length,0),end=new Uint8Array(22),v=new DataView(end.buffer);v.setUint32(0,0x06054b50,true);v.setUint16(8,files.length,true);v.setUint16(10,files.length,true);v.setUint32(12,size,true);v.setUint32(16,offset,true);return new Blob([...chunks,...central,end],{type:'application/zip'});
   }
-  const api={releaseSignature,githubHealth,taskGithub,isValidated,dependencyIssues,reconcileDependencies,nextSuggestions,suggestedTask,RELEASE_CHECKS,releaseReadiness,releaseNotes,proposeTask,contextChoices,missionPrompt,validateTask,VERSION,KEY,ROLES,completedTasks,STATUSES,ASSET_STATUSES,DEFAULT_DOCS,uid,text,clone,role,normalizeProject,normalizeState,starter,slug,safeFilename,parseRepo,safePath,sharedPayload,applyShared,markdown,context,unresolved,utf8Base64,fromBase64,makeZip};
+  function missionEvaluated(h) {
+    return Number.isFinite(Date.parse(text(h.evaluatedAt)))&&['done','partial','failed'].includes(h.outcome)&&!!text(h.result).trim();
+  }
+  function filteredMissions(p,roleId='',ai='') {
+    return p.handoffs.filter(h=>['ChatGPT','Claude'].includes(h.to)&&(!roleId||(roleId==='unassigned'?!h.role:h.role===roleId))&&(!ai||h.to===ai));
+  }
+  function missionStats(p,roleId='',ai='') {
+    const entries=filteredMissions(p,roleId,ai);
+    return (ai?[ai]:['ChatGPT','Claude']).map(name=>{
+      const own=entries.filter(h=>h.to===name),evaluated=own.filter(missionEvaluated),rated=evaluated.filter(h=>[1,2,3,4,5].includes(h.rating));
+      const count=status=>evaluated.filter(h=>h.outcome===status).length;
+      return {ai:name,total:own.length,evaluated:evaluated.length,excluded:own.length-evaluated.length,rated:rated.length,average:rated.length?rated.reduce((sum,h)=>sum+h.rating,0)/rated.length:null,done:count('done'),partial:count('partial'),failed:count('failed'),successRate:evaluated.length?100*count('done')/evaluated.length:null};
+    });
+  }
+  function missionReport(p,roleId='',ai='') {
+    const missions=filteredMissions(p,roleId,ai).filter(missionEvaluated);
+    return '# Bilan des missions évaluées · '+p.name+'\nPoste : '+(roleId==='unassigned'?'Non renseigné':roleId?role(roleId).name:'Tous')+' · IA : '+(ai||'Toutes')+'\n\n'+missionStats(p,roleId,ai).map(s=>s.ai+' : '+s.evaluated+' évaluée(s) / '+s.total+' archivée(s), '+s.done+' réussie(s), '+s.partial+' partielle(s), '+s.failed+' non satisfaisante(s). Note : '+(s.average===null?'Non notée':s.average.toFixed(1)+'/5 sur '+s.rated+' avis personnels.')).join('\n')+'\n\n'+missions.map(h=>'## '+h.title+' ['+h.id+']\nIA : '+h.to+' · Poste : '+(h.role?role(h.role).name:'Non renseigné')+'\nÉvaluée le : '+h.evaluatedAt+'\nRésultat déclaré : '+h.outcome+' · Note : '+(h.rating||'Non notée')+'\nLivrable : '+h.result+'\nLimites et corrections : '+h.notes).join('\n\n')+'\n\nAppréciations personnelles sur les missions ci-dessus. Aucune mesure objective ni classement général des IA. Les missions sans évaluation complète sont exclues.\n';
+  }
+  const api={missionEvaluated,filteredMissions,missionStats,missionReport,releaseSignature,githubHealth,taskGithub,isValidated,dependencyIssues,reconcileDependencies,nextSuggestions,suggestedTask,RELEASE_CHECKS,releaseReadiness,releaseNotes,proposeTask,contextChoices,missionPrompt,validateTask,VERSION,KEY,ROLES,completedTasks,STATUSES,ASSET_STATUSES,DEFAULT_DOCS,uid,text,clone,role,normalizeProject,normalizeState,starter,slug,safeFilename,parseRepo,safePath,sharedPayload,applyShared,markdown,context,unresolved,utf8Base64,fromBase64,makeZip};
   root.AtelierCore=api;
   if(typeof module!=='undefined'&&module.exports)module.exports=api;
 })(typeof window!=='undefined'?window:globalThis);

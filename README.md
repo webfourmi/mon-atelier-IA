@@ -1,4 +1,4 @@
-# Mon Atelier IA · V3.1 — intégration et continuité
+# Mon Atelier IA · V3.2 — confort et optimisation
 
 Un atelier personnel pour organiser les projets menés avec ChatGPT et Claude : dix postes de travail, un dossier commun et un suivi clair des tâches, décisions, fichiers et versions.
 
@@ -127,3 +127,27 @@ Enregistrer puis copier ou télécharger le dossier Markdown. Les cases restent 
 La fiche de livraison est incluse dans les sauvegardes complètes et exports de projet. Elle n’est pas importée par le partage des seuls documents/références du dossier commun. La clé locale, le schéma 3 et le stockage des originaux restent identiques à V3.0.
 
 Voir [RAPPORT-V3.1.md](RAPPORT-V3.1.md) pour les tests et limites.
+
+
+## V3.2 — choisir son niveau de détail
+
+Le sélecteur **NIVEAU DE DÉTAIL**, sous le projet actif, propose :
+
+- **Débutant · guidé** (par défaut à la première ouverture de V3.2) : navigation essentielle, outils complémentaires regroupés dans **Tous les outils**, réglages GitHub et dépendances des fiches repliés, contexte de transmission ajustable dans un volet, liste verticale des états de tâches réellement présents.
+- **Avancé · détaillé** : tous les liens directement accessibles, réglages déployés, tableau de tâches à six colonnes et tableau de bord détaillé ouvert.
+
+Les deux modes utilisent les mêmes projets et contrôles de validation. Replier une option ne la vide pas : les valeurs, fichiers liés et dépendances sont conservés lors de l’enregistrement. Les volets restent ouvrables en mode débutant. Le mode choisi s’applique à tout l’atelier, survit à la fermeture et fait partie de la sauvegarde complète ; il ne modifie pas le niveau de contexte choisi pour une transmission.
+
+Sur chaque page, **Aller à** donne accès à tous les espaces et **← Accueil** ramène au pilotage. Un lien direct vers un outil complémentaire ouvre son groupe dans le menu. Le contenu principal reçoit le focus après un changement de page pour faciliter la navigation au clavier.
+
+## V3.2 — bilans des IA fondés sur les missions évaluées
+
+**Bilans des IA** regroupe les résultats du projet actif, filtrables par poste et par IA. Une mission compte comme évaluée si elle possède les trois éléments suivants : résultat reçu, état **Réussi / Partiel / Non satisfaisant**, date d’évaluation valide. Une note sur 5 est facultative.
+
+Le bilan affiche le nombre de missions évaluées et archivées, les résultats déclarés et la moyenne des seules missions **évaluées et notées**, avec son nombre d’avis. Zéro note donne « Aucune note exploitable », jamais zéro sur cinq. Les petits échantillons sont signalés. Il n’existe ni vainqueur automatique ni modification des recommandations de postes : il s’agit d’appréciations personnelles.
+
+La liste permet de relire la consigne, vérifier le résultat et corriger une évaluation. Le filtre **Sans évaluation complète** permet de retrouver les missions en attente et anciennes notes non datées : elles sont conservées sans être incluses dans les calculs. Pour les inclure, relire leur résultat, choisir un état de réussite et enregistrer l’évaluation. Repasser une mission en attente la retire du bilan sans effacer son contenu.
+
+Les boutons Copier/Télécharger exportent le bilan du poste et de l’IA sélectionnés, avec uniquement les missions évaluées, leurs identifiants, résultats, dates, notes et commentaires. Le filtre d’affichage de la liste ne change pas la population du calcul ou de l’export. Les bilans de chaque poste emploient la même règle.
+
+Les préférences et évaluations restent locales, sauvegardées dans le JSON complet. Elles ne sont pas ajoutées au partage du seul dossier commun. Clé de stockage, schéma 3, originaux, dépendances, préparation de livraison et fonctions GitHub restent conservés. Voir [RAPPORT-V3.2.md](RAPPORT-V3.2.md).
