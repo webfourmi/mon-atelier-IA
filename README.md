@@ -1,4 +1,4 @@
-# Mon Atelier IA · V2.1
+# Mon Atelier IA · V2.2
 
 Un atelier personnel pour organiser les projets menés avec ChatGPT et Claude : dix postes de travail, un dossier commun et un suivi clair des tâches, décisions, fichiers et versions.
 
@@ -69,3 +69,7 @@ L’application n’a aucune dépendance à installer. Les dépendances présent
 ## Affectation conseillée des IA (V2.1)
 
 Chaque poste affiche une IA principale et une IA de contrôle. ChatGPT est proposé pour pilotage, recherche, usages, médias, programmation, livraison et optimisation ; Claude pour design, contenus et tests. Les transmissions sélectionnent automatiquement l'IA principale lors du choix du poste, et le bouton « Contrôle » prépare la seconde IA. L'utilisateur peut changer l'IA destinataire, et les tâches existantes conservent leur intervenant. Aucun appel d'API payant n'est nécessaire. Les données V1/V2 restent dans leur format existant.
+
+## Historique et appréciation des IA (V2.2)
+
+Chaque transmission archivée conserve désormais son poste, la tâche associée et l'IA destinataire. Depuis le poste ou les transmissions, « Résultat / évaluation » permet de noter le livrable, le statut (en attente, réussi, partiel, non satisfaisant), une appréciation personnelle de 1 à 5 et les corrections utiles. Les postes affichent un historique et des bilans séparés ChatGPT/Claude, sans classement automatique arbitraire. Les anciennes transmissions restent intactes et apparaissent sans poste attribué si l'ancienne sauvegarde ne le précisait pas. Le bilan est local ; aucune donnée n'est automatiquement envoyée aux IA.
