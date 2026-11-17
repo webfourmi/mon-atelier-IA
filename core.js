@@ -17,6 +17,14 @@
     {id:'livraison',n:'09',name:'Livraison & versions',short:'Publier avec des repères',mission:'Préparer la livraison, identifier la version et vérifier la mise à jour installée.',output:'Version, nouveautés et procédure de retour arrière.',prompt:'Agis comme responsable de livraison. Identifie exactement les fichiers et la version à livrer, vérifie les prérequis et rédige les nouveautés ainsi que le retour arrière.'},
     {id:'optimisation',n:'10',name:'Optimisation & suivi',short:'Améliorer ce qui compte',mission:'Analyser les difficultés, simplifier les usages et corriger les problèmes récurrents.',output:'Améliorations classées selon leur effet et leur effort.',prompt:'Agis comme responsable de l’amélioration continue. Pars des retours et mesures disponibles, propose des améliorations ciblées et indique comment vérifier leur effet.'}
   ];
+  // Recommandations modifiables lors de chaque transmission ; aucun service IA payant requis.
+  const AI_ASSIGNMENTS = {
+    pilotage:['ChatGPT','Claude'],recherche:['ChatGPT','Claude'],usages:['ChatGPT','Claude'],
+    design:['Claude','ChatGPT'],contenus:['Claude','ChatGPT'],medias:['ChatGPT','Claude'],
+    programmation:['ChatGPT','Claude'],tests:['Claude','ChatGPT'],
+    livraison:['ChatGPT','Claude'],optimisation:['ChatGPT','Claude']
+  };
+  ROLES.forEach(r=>{[r.primaryAI,r.reviewAI]=AI_ASSIGNMENTS[r.id];});
   const STATUSES = [{id:'draft',name:'À préparer'},{id:'ready',name:'Prêt'},{id:'doing',name:'En cours'},{id:'review',name:'À vérifier'},{id:'done',name:'Terminé'}];
   const ASSET_STATUSES = [{id:'available',name:'À valider'},{id:'validated',name:'Validé'},{id:'integrated',name:'Intégré'},{id:'tested',name:'Vérifié en place'}];
   const DEFAULT_DOCS = [
