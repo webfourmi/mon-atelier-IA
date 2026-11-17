@@ -1,6 +1,6 @@
 (function (root) {
   'use strict';
-  const VERSION = '2.0.0';
+  const VERSION = '2.1.0';
   const KEY = 'atelier-ia-v1';
   const uid = () => globalThis.crypto?.randomUUID?.() || 'a-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2);
   const text = v => typeof v === 'string' ? v : (typeof v === 'number' ? String(v) : '');
