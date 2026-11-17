@@ -1,6 +1,6 @@
 {
   "name": "mon-atelier-ia-tests",
   "private": true,
-  "scripts": {"test": "node --test core.test.cjs planning.test.cjs parcours.test.cjs"},
+  "scripts": {"test": "node --test core.test.cjs planning.test.cjs workflows.test.cjs parcours.test.cjs"},
   "devDependencies": {"fake-indexeddb": "6.2.8", "happy-dom": "21.0.4"}
 }

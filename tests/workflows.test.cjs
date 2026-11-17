@@ -1,0 +1,22 @@
+const test=require('node:test'),assert=require('node:assert/strict'),C=require('../workflows.js');
+const project=()=>C.normalizeProject({name:'Équipe',workItems:[]});
+test('workflow defaults seed once and restored custom or empty libraries are retained',()=>{
+ const raw={projects:[],prompts:[],comparisons:[]},n=C.normalizeState(raw);assert.equal(n.workflows.length,4);assert.deepEqual(C.normalizeState(n).workflows,n.workflows);assert.deepEqual(C.normalizeState({...raw,workflows:[]}).workflows,[]);assert.throws(()=>C.normalizeWorkflow({name:'Vide',steps:[]}));assert.throws(()=>C.normalizeWorkflow({name:'Invalide',steps:[{title:'Étape',role:'inconnu',ai:'Claude'}]}));
+});
+test('preview does not mutate a project and confirmed workflow creates a sequential team once',()=>{
+ const p=project(),before=C.clone(p),w=C.DEFAULT_WORKFLOWS[0],preview=C.workflowPreview(p,w,'Ajouter une recherche');assert.deepEqual(p,before);assert.equal(preview.tasks.length,3);assert.equal(preview.tasks[1].owner,'Claude');assert.deepEqual(preview.tasks[1].dependsOn,[preview.tasks[0].id]);const run=C.applyWorkflow(p,preview);assert.equal(p.workItems.length,3);assert.equal(p.workflowRuns[0].id,run.id);assert.throws(()=>C.applyWorkflow(p,preview));assert(C.dependencyIssues(p,p.workItems[1]).length);assert.throws(()=>C.validateTask(p,p.workItems[1],{...p.workItems[1],status:'doing'}),/prérequis/);
+});
+test('existing task keeps files, title and prerequisites, with original snapshot and stale preview protection',()=>{
+ const p=project(),source={...C.makeTask(p,'Besoin existant','programmation'),id:'source',assetIds:['file'],dependsOn:['prerequisite'],criteria:'Critère original'};p.workItems.push(source);const preview=C.workflowPreview(p,C.DEFAULT_WORKFLOWS[1],'Texte ignoré car source choisie','source');assert.equal(preview.tasks[0].title,source.title);assert.deepEqual(preview.tasks[0].assetIds,['file']);assert.deepEqual(preview.tasks[0].dependsOn,['prerequisite']);assert(preview.tasks[0].criteria.includes('Critère original'));assert.equal(preview.sourceSnapshot.role,'programmation');source.objective='Modification concurrente';assert.throws(()=>C.applyWorkflow(p,preview),/changé/);assert.equal(p.workItems.length,1);
+});
+test('started tasks and pending archived missions cannot be reassigned by a workflow',()=>{
+ const p=project(),source=C.makeTask(p,'Faire une fonction');source.id='source';p.workItems.push(source);source.status='doing';assert.throws(()=>C.workflowPreview(p,C.DEFAULT_WORKFLOWS[0],'','source'));source.status='ready';p.handoffs.push({taskId:'source'});assert.equal(C.eligibleSource(p,source),false);const w={...C.DEFAULT_WORKFLOWS[0],archived:true};assert.throws(()=>C.workflowPreview(p,w,'Une demande'));
+});
+test('steps use independent roles and AIs, pass only a validated predecessor and keep snapshot unchanged',()=>{
+ const p=project(),w=C.normalizeWorkflow({name:'Rédaction croisée',steps:[{title:'Rédiger',role:'contenus',ai:'Claude',instruction:'Rédige pour débutants'},{title:'Relire',role:'contenus',ai:'ChatGPT',instruction:'Contrôle la clarté'}]});C.applyWorkflow(p,C.workflowPreview(p,w,'Écrire une leçon'));w.steps[0].ai='ChatGPT';assert.equal(p.workflowRuns[0].workflow.steps[0].ai,'Claude');const a=p.workItems[0],b=p.workItems[1];let prompt=C.missionPrompt(p,'standard',b.role,b.id,'',undefined,b.owner);assert(prompt.includes('Contrôle la clarté'));assert(prompt.includes('attendre sa validation'));a.status='done';a.validationVersion=3;a.result='RÉSULTAT VALIDÉ DU RÉDACTEUR';a.evidence='Relu';prompt=C.missionPrompt(p,'standard',b.role,b.id,'',undefined,b.owner);assert(prompt.includes('RÉSULTAT VALIDÉ DU RÉDACTEUR'));assert(prompt.includes('Étape 2/2'));a.status='review';assert(!C.missionPrompt(p,'standard',b.role,b.id,'',undefined,b.owner).includes('RÉSULTAT VALIDÉ DU RÉDACTEUR'));
+});
+
+
+test('intermediate workflow stages do not generate competing generic next-task suggestions',()=>{
+ const p=project(),w=C.normalizeWorkflow({name:'Texte',steps:[{title:'Rédiger',role:'contenus',ai:'Claude'},{title:'Relire',role:'contenus',ai:'ChatGPT'}]});C.applyWorkflow(p,C.workflowPreview(p,w,'Une leçon'));const first=p.workItems[0];first.status='done';first.validationVersion=3;first.result='Texte';assert.equal(C.nextSuggestions(p).length,0);const last=p.workItems[1];last.status='done';last.validationVersion=3;last.result='Relecture';assert(C.nextSuggestions(p).some(s=>s.role==='programmation'));
+});
