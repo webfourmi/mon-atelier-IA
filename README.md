@@ -1,4 +1,4 @@
-# Mon Atelier IA · V3.0 — phase 1
+# Mon Atelier IA · V3.1 — intégration et continuité
 
 Un atelier personnel pour organiser les projets menés avec ChatGPT et Claude : dix postes de travail, un dossier commun et un suivi clair des tâches, décisions, fichiers et versions.
 
@@ -98,3 +98,32 @@ Le format partagé reste `mon-atelier-ia-dossier`, version 2, avec des champs ad
 Avant tout essai sur ses données réelles, exporter une sauvegarde complète depuis V2.3 et la conserver avec l’ancienne application. Le stockage d’un fichier HTML dépend toujours du navigateur et de son chemin : utiliser l’import JSON si les données ne sont pas retrouvées. Le retour vers V2.3 doit se faire avec la sauvegarde V2.3, car elle ne connaît pas le nouvel état « Travail rendu ».
 
 Voir [RAPPORT-V3-PHASE1.md](RAPPORT-V3-PHASE1.md) pour les vérifications et limites.
+
+
+## V3.1 — intégration et continuité
+
+### Assistant GitHub
+
+Dans **GitHub → Actualiser le suivi**, consulter les branches (30 maximum), les demandes de fusion ouvertes (30 maximum), les contrôles de la branche choisie et la dernière release disponible. La date de lecture reste visible. Une absence de contrôles, une erreur de permission ou des révisions différentes restent « non confirmées ». Le suivi n’écrit rien dans le dépôt. Les actions de création de branche, comparaison, fusion et publication s’effectuent sur GitHub, via les liens proposés ; l’envoi du dossier commun conserve son aperçu et sa confirmation.
+
+Chaque tâche peut conserver une **branche de travail** et le **lien d’une demande de fusion**. Ces repères rejoignent le prompt, les références de livrables validés et la sauvegarde. L’assistant ne vérifie pas automatiquement que les liens de chaque tâche correspondent à une demande fusionnée.
+
+### Suggestions des prochaines tâches
+
+Après validation d’un résultat : conception/contenus/médias/usages → programmation ; programmation → tests ; tests → préparation de livraison. L’accueil explique la proposition. « Préparer cette tâche » ouvre une fiche modifiable : seule son sauvegarde crée la tâche. La source devient un prérequis et ses références sont reprises. Une suggestion déjà créée ou un relais du même poste déjà lié à cette source n’est plus proposé. Les suggestions reposent sur des règles locales, pas sur une API IA.
+
+### Dépendances
+
+Le tableau des tâches affiche les prérequis non validés, les références absentes et les boucles importées. La fiche indique aussi les tâches qui attendent son résultat. Le démarrage d’une tâche avec un prérequis bloquant est refusé. Les cycles créés dans l’éditeur sont toujours refusés.
+
+Si un résultat validé est repris, les tâches validées qui en dépendent, directement ou indirectement, reviennent à vérifier ; leurs résultats et preuves sont conservés. Elles sortent des livrables de référence jusqu’à leur nouvelle validation. La vérification a aussi lieu à l’ouverture des données existantes, sans nouvelle version du schéma ni suppression de contenu.
+
+### Préparer la livraison
+
+Le nouvel espace rassemble la version cible, les nouveautés, les confirmations de sauvegarde/tests/fichiers/retour arrière et la procédure de restauration. Il signale les tâches encore non validées et demande au moins une mission **Tests & qualité** validée. Le contrôle porte sur **toutes les tâches du projet** ; il n’existe pas encore de sélection d’un lot de livraison.
+
+Enregistrer puis copier ou télécharger le dossier Markdown. Les cases restent des confirmations personnelles ; l’atelier ne lance pas lui-même les tests des autres applications. Après une modification des tâches, les confirmations doivent être relues et enregistrées de nouveau. « Dossier prêt pour une revue de livraison » ne signifie pas « application publiée » : fusion et déploiement sont à vérifier séparément sur GitHub.
+
+La fiche de livraison est incluse dans les sauvegardes complètes et exports de projet. Elle n’est pas importée par le partage des seuls documents/références du dossier commun. La clé locale, le schéma 3 et le stockage des originaux restent identiques à V3.0.
+
+Voir [RAPPORT-V3.1.md](RAPPORT-V3.1.md) pour les tests et limites.

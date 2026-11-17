@@ -1,6 +1,6 @@
 (function (root) {
   'use strict';
-  const VERSION = '3.0.0-phase1';
+  const VERSION = '3.1.0';
   const KEY = 'atelier-ia-v1';
   const uid = () => globalThis.crypto?.randomUUID?.() || 'a-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2);
   const text = v => typeof v === 'string' ? v : (typeof v === 'number' ? String(v) : '');
@@ -75,10 +75,10 @@
   }
   function safePath(value) {const v=text(value).trim();if(!v||v.startsWith('/')||v.includes('\\')||v.split('/').some(x=>!x||x==='.'||x==='..')||/[\x00-\x1f?#]/.test(v))throw Error('Le chemin du fichier GitHub est invalide.');return v;}
   function completedTasks(p) {
-    return p.workItems.filter(t=>t.status==='done'&&t.validationVersion===3).map(t=>({
+    return p.workItems.filter(t=>isValidated(t)&&!t.blocked&&!dependencyIssues(p,t).length).map(t=>({
       id:t.id,title:t.title,role:t.role,owner:t.owner,objective:t.objective,
       deliverable:t.deliverable,result:text(t.result),resultFiles:text(t.resultFiles),resultLimits:text(t.resultLimits),criteria:t.criteria,evidence:t.evidence,
-      validationVersion:3,completedAt:t.completedAt||t.updatedAt||'',
+      dependsOn:[...(t.dependsOn||[])],suggestionKey:text(t.suggestionKey),workBranch:text(t.workBranch),pullRequest:text(t.pullRequest),validationVersion:3,completedAt:t.completedAt||t.updatedAt||'',
       files:(t.assetIds||[]).map(id=>p.assets.find(a=>a.id===id)).filter(Boolean).map(a=>({id:a.id,name:a.name,status:a.status,note:a.note}))
     }));
   }
@@ -89,7 +89,7 @@
     if(!raw||raw.format!=='mon-atelier-ia-dossier'||raw.version!==2||!raw.project||!Array.isArray(raw.documents)||!Array.isArray(raw.decisions))throw Error('Ce fichier n’est pas un dossier commun compatible.');
     const existing=new Set(p.workItems.map(t=>t.id));
     const received=Array.isArray(raw.completedTasks)?raw.completedTasks.filter(t=>t&&typeof t==='object'&&text(t.id)&&text(t.title)&&!existing.has(t.id)).map(t=>({
-      id:t.id,title:t.title,role:t.role,status:'done',validationVersion:t.validationVersion===3?3:0,owner:t.owner,
+      dependsOn:Array.isArray(t.dependsOn)?t.dependsOn.map(text):[],suggestionKey:text(t.suggestionKey),workBranch:text(t.workBranch),pullRequest:text(t.pullRequest),id:t.id,title:t.title,role:t.role,status:'done',validationVersion:t.validationVersion===3?3:0,owner:t.owner,
       objective:t.objective,deliverable:t.deliverable,result:text(t.result),resultFiles:text(t.resultFiles),resultLimits:text(t.resultLimits),criteria:t.criteria,evidence:t.evidence,
       completedAt:t.completedAt,updatedAt:t.completedAt,assetIds:[]
     })):[];
@@ -134,21 +134,90 @@
   function missionPrompt(p,level,roleId,taskId,request,selection,ai='ChatGPT') {
     const ids=Array.isArray(selection)?selection:contextChoices(p,roleId).filter(d=>d.selected).map(d=>d.id);
     const selected={...p,documents:p.documents.filter(d=>ids.includes(d.id))};
-    return 'Mission pour '+ai+' · préparation locale, sans API IA payante\n'+(ai==='Claude'?'Présente une réponse structurée et des livrables directement réutilisables.':'Avance par étapes concrètes et fournis les livrables ainsi que leurs vérifications.')+'\n'+context(selected,level,roleId,taskId,request);
+    return 'Mission pour '+ai+' · préparation locale, sans API IA payante\n'+(ai==='Claude'?'Présente une réponse structurée et des livrables directement réutilisables.':'Avance par étapes concrètes et fournis les livrables ainsi que leurs vérifications.')+'\n'+context(selected,level,roleId,taskId,request)+taskGithub(p,p.workItems.find(t=>t.id===taskId));
   }
   function validateTask(p,previous,next) {
+    if(next.status==='doing'&&(next.blocked||dependencyIssues(p,next).length))throw Error('Résous les prérequis et blocages avant de commencer.');
     if(next.status==='review'&& !['returned','review','done'].includes(previous.status))throw Error('Enregistre d’abord le retour de mission dans « Travail rendu ».');
     if(next.status==='done') {
       if(previous.status!=='review'&&(previous.status!=='done'||previous.validationVersion!==3))throw Error('Passe par « À vérifier » avant de valider.');
       if(!text(next.result).trim()||!text(next.evidence).trim()||!text(next.criteria).trim())throw Error('Renseigne le résultat, les critères et les vérifications avant validation.');
       if(next.blocked||unresolved(p,next).length)throw Error('Résous les blocages et prérequis avant validation.');
-      if(previous.status==='done'&&['title','result','resultFiles','resultLimits','evidence','criteria','objective','deliverable','role','owner','inputs','blocked','assetIds','dependsOn'].some(k=>JSON.stringify(previous[k])!==JSON.stringify(next[k]))) {
+      if(previous.status==='done'&&['title','result','resultFiles','resultLimits','evidence','criteria','objective','deliverable','role','owner','inputs','blocked','workBranch','pullRequest','assetIds','dependsOn'].some(k=>JSON.stringify(previous[k])!==JSON.stringify(next[k]))) {
         next.status='review';next.completedAt='';
-      } else {next.validationVersion=3;next.legacyCompleted=false;}
+      } else {next.validationVersion=3;next.legacyCompleted=false;next.invalidatedReason='';}
     }
     return next;
   }
-  function unresolved(p,t) {return t.dependsOn.map(id=>p.workItems.find(x=>x.id===id)).filter(x=>x&&(x.status!=='done'||x.validationVersion!==3));}
+  function isValidated(t) {return !!t&&t.status==='done'&&t.validationVersion===3&&!t.legacyCompleted;}
+  function dependencyIssues(p,t) {
+    const issues=new Map(),path=new Set([t.id]),expanded=new Set();
+    function visit(id) {
+      const item=p.workItems.find(x=>x.id===id);
+      if(path.has(id)){issues.set('cycle:'+id,{id,title:item?.title||id,reason:'Dépendance circulaire'});return;}
+      if(!item){issues.set('missing:'+id,{id,title:'Tâche absente : '+id,reason:'Prérequis introuvable'});return;}
+      if(!isValidated(item)||item.blocked)issues.set(id,{...item,reason:item.blocked?'Prérequis bloqué : '+item.blocked:'Prérequis non validé'});
+      if(expanded.has(id))return;expanded.add(id);path.add(id);for(const dep of item.dependsOn||[])visit(dep);path.delete(id);
+    }
+    for(const id of t.dependsOn||[])visit(id);
+    return [...issues.values()];
+  }
+  function unresolved(p,t) {return dependencyIssues(p,t);}
+  function reconcileDependencies(p) {
+    let changed=false;
+    for(const t of p.workItems)if(isValidated(t)&&dependencyIssues(p,t).length){
+      t.status='review';t.completedAt='';t.invalidatedReason='Un prérequis a changé : revérifier ce résultat.';changed=true;
+    }
+    return changed;
+  }
+  function nextSuggestions(p) {
+    const list=[];
+    for(const t of p.workItems) {
+      if(!isValidated(t)||t.blocked||dependencyIssues(p,t).length)continue;
+      const nextRole=['design','contenus','medias','usages'].includes(t.role)?'programmation':t.role==='programmation'?'tests':t.role==='tests'?'livraison':'';
+      if(!nextRole)continue;
+      const key=t.id+':'+nextRole;
+      if(p.workItems.some(x=>x.suggestionKey===key||x.role===nextRole&&(x.dependsOn||[]).includes(t.id)))continue;
+      const verb=nextRole==='tests'?'Vérifier':nextRole==='livraison'?'Préparer la livraison de':'Intégrer';
+      list.push({key,sourceId:t.id,role:nextRole,title:verb+' : '+t.title,reason:'Le résultat « '+t.title+' » est validé. Le poste '+role(nextRole).name+' peut prendre la suite.'});
+    }
+    return list;
+  }
+  function suggestedTask(p,key) {
+    const suggestion=nextSuggestions(p).find(x=>x.key===key);if(!suggestion)throw Error('Cette suggestion est déjà traitée ou n’est plus disponible.');
+    const source=p.workItems.find(x=>x.id===suggestion.sourceId),t=proposeTask(suggestion.title,suggestion.role);
+    return {...t,workBranch:text(source.workBranch),pullRequest:text(source.pullRequest),suggestionKey:key,dependsOn:[source.id],objective:suggestion.title,inputs:'Résultat validé à reprendre : '+source.result+'\nRéférences : '+(source.resultFiles||'À préciser'),criteria:suggestion.role==='tests'?'Contrôler le résultat attendu, les sauvegardes et les régressions. Décrire les tests réellement effectués et les limites.':t.criteria};
+  }
+  const RELEASE_CHECKS=[['backup','Sauvegarde complète conservée'],['scope','Version et fichiers à livrer identifiés'],['tests','Tests de la version exécutés et preuves relues'],['rollback','Procédure de retour arrière préparée']];
+  function releaseSignature(p) {
+    return String(crc32(new TextEncoder().encode(JSON.stringify(p.workItems.map(t=>({id:t.id,title:t.title,status:t.status,validationVersion:t.validationVersion,role:t.role,result:text(t.result),evidence:text(t.evidence),criteria:text(t.criteria),blocked:text(t.blocked),dependsOn:t.dependsOn||[],resultFiles:text(t.resultFiles),resultLimits:text(t.resultLimits),workBranch:text(t.workBranch),pullRequest:text(t.pullRequest)}))))));
+  }
+  function githubHealth(o) {
+    const checks=o?.checks?.check_runs||[],statuses=o?.status?.statuses||[];
+    const failed=checks.some(c=>['failure','cancelled','timed_out','action_required','startup_failure','stale'].includes(c.conclusion))||statuses.some(c=>['failure','error'].includes(c.state));
+    const pending=checks.some(c=>c.status!=='completed')||statuses.some(c=>c.state==='pending');
+    const mismatch=checks.some(c=>c.head_sha&&o?.status?.sha&&c.head_sha!==o.status.sha);
+    const clear=checks.length+statuses.length>0&&!failed&&!pending&&!mismatch&&!o?.errors?.checks&&!o?.errors?.status&&checks.every(c=>['success','neutral','skipped'].includes(c.conclusion));
+    return {failed,pending,clear,label:failed?'Échec signalé par GitHub':pending?'Contrôles en cours':clear?'Contrôles consultés sans échec':'Contrôles non confirmés'};
+  }
+  function taskGithub(p,t) {
+    if(!p.github.owner||!p.github.repo)return '';
+    return '\n## Repères GitHub de la mission\nDépôt : https://github.com/'+p.github.owner+'/'+p.github.repo+'\nBranche de travail : '+(text(t?.workBranch)||'À créer ou confirmer sur GitHub')+'\nDemande de fusion : '+(text(t?.pullRequest)||'À préparer après les tests')+'\nConsulte le code existant et travaille sur une branche dédiée. Rapporte les commits, fichiers, tests et limites. Prépare la livraison après validation, puis vérifie la fusion et le déploiement séparément.\n';
+  }
+  function releaseReadiness(p) {
+    const items=p.workItems,issues=items.filter(t=>!isValidated(t)||t.blocked||dependencyIssues(p,t).length);
+    const missing=RELEASE_CHECKS.filter(([id])=>p.releasePlan?.checks?.[id]!==true).map(([,label])=>label);
+    if(!text(p.releasePlan?.version).trim())missing.unshift('Version cible à renseigner');
+    if(!text(p.releasePlan?.rollback).trim())missing.push('Retour arrière à décrire');
+    if(!items.some(t=>t.role==='tests'&&isValidated(t)&&!dependencyIssues(p,t).length))missing.push('Une mission Tests & qualité validée est nécessaire');
+    if(!items.length)missing.push('Aucune tâche dans le projet');
+    if(p.releasePlan?.reviewSignature&&p.releasePlan.reviewSignature!==releaseSignature(p))missing.push('Les tâches ont changé depuis la préparation : relire et confirmer de nouveau la fiche.');
+    return {ready:issues.length===0&&missing.length===0,issues,missing};
+  }
+  function releaseNotes(p) {
+    const r=releaseReadiness(p),plan=p.releasePlan||{};
+    return '# Préparation de livraison · '+p.name+'\nVersion cible : '+(text(plan.version)||'À préciser')+'\nÉtat local : '+(r.ready?'Dossier prêt pour une revue de livraison':'Préparation incomplète')+'\n\n## Résultats validés\n'+completedTasks(p).map(t=>'- '+t.title+' : '+t.result+'\n  Vérifications : '+t.evidence+'\n  Références : '+t.resultFiles+'\n  Branche : '+t.workBranch+'\n  Demande de fusion : '+t.pullRequest+'\n  Limites : '+t.resultLimits).join('\n')+'\n\n## À résoudre\n'+[...r.issues.map(t=>t.title),...r.missing].map(x=>'- '+x).join('\n')+'\n\n## Notes\n'+text(plan.notes)+'\n\n## Retour arrière\n'+text(plan.rollback)+'\n\nPréparation locale. La fusion GitHub et la publication doivent être vérifiées séparément.\n';
+  }
   function utf8Base64(s) {const b=new TextEncoder().encode(s);let binary='';for(let i=0;i<b.length;i+=8192)binary+=String.fromCharCode(...b.subarray(i,i+8192));return btoa(binary);}
   function fromBase64(s) {const str=atob(s.replace(/\s/g,''));return new TextDecoder('utf-8',{fatal:true}).decode(Uint8Array.from(str,c=>c.charCodeAt(0)));}
   const crcTable=Array.from({length:256},(_,n)=>{for(let k=0;k<8;k++)n=(n&1)?0xedb88320^(n>>>1):n>>>1;return n>>>0;});
@@ -161,7 +230,7 @@
     }
     const size=central.reduce((n,c)=>n+c.length,0),end=new Uint8Array(22),v=new DataView(end.buffer);v.setUint32(0,0x06054b50,true);v.setUint16(8,files.length,true);v.setUint16(10,files.length,true);v.setUint32(12,size,true);v.setUint32(16,offset,true);return new Blob([...chunks,...central,end],{type:'application/zip'});
   }
-  const api={proposeTask,contextChoices,missionPrompt,validateTask,VERSION,KEY,ROLES,completedTasks,STATUSES,ASSET_STATUSES,DEFAULT_DOCS,uid,text,clone,role,normalizeProject,normalizeState,starter,slug,safeFilename,parseRepo,safePath,sharedPayload,applyShared,markdown,context,unresolved,utf8Base64,fromBase64,makeZip};
+  const api={releaseSignature,githubHealth,taskGithub,isValidated,dependencyIssues,reconcileDependencies,nextSuggestions,suggestedTask,RELEASE_CHECKS,releaseReadiness,releaseNotes,proposeTask,contextChoices,missionPrompt,validateTask,VERSION,KEY,ROLES,completedTasks,STATUSES,ASSET_STATUSES,DEFAULT_DOCS,uid,text,clone,role,normalizeProject,normalizeState,starter,slug,safeFilename,parseRepo,safePath,sharedPayload,applyShared,markdown,context,unresolved,utf8Base64,fromBase64,makeZip};
   root.AtelierCore=api;
   if(typeof module!=='undefined'&&module.exports)module.exports=api;
 })(typeof window!=='undefined'?window:globalThis);

@@ -20,6 +20,14 @@
     repositories(owner){return this.getToken()?this.request('/user/repos?sort=updated&per_page=100'):this.request('/users/'+encodeURIComponent(owner)+'/repos?sort=updated&per_page=100');}
     contents(g,path=''){return this.request(this.base(g)+'/contents/'+path.split('/').map(encodeURIComponent).join('/')+'?ref='+encodeURIComponent(g.branch),{allow404:true});}
     issues(g){return this.request(this.base(g)+'/issues?state=open&per_page=30');}
+    async overview(g) {
+      const repo=await this.repo(g),branch=g.branch||repo.default_branch;
+      const base=this.base(g),ref=encodeURIComponent(branch);
+      const paths={branches:'/branches?per_page=30',pulls:'/pulls?state=open&per_page=30',checks:'/commits/'+ref+'/check-runs?per_page=100',status:'/commits/'+ref+'/status',release:'/releases/latest'};
+      const data={repo,branch,readAt:new Date().toISOString(),errors:{}};
+      await Promise.all(Object.entries(paths).map(async([key,path])=>{try{data[key]=await this.request(base+path,{allow404:key==='release'});}catch(e){data.errors[key]=e.message;}}));
+      return data;
+    }
     async prepare(g,content){
       const meta=await this.repo(g);const selected={...g,branch:g.branch||meta.default_branch};
       const file=await this.contents(selected,selected.path);

@@ -36,7 +36,7 @@ async function newTask(env,{title,role='programmation',status='ready',blocked=''
   await env.click('[data-action="new-task"]');env.fill('#taskTitle',title);env.fill('#taskRole',role);env.fill('#taskStatus',status);env.fill('#taskDeliverable','Un résultat concret');env.fill('#taskCriteria','Un contrôle observable');env.fill('#taskBlocked',blocked);if(depends){env.$('#taskDeps').value=depends;}await env.submit('#editorForm');
 }
 
-test('boot: dashboard, ten roles, documents and all navigation pages',async()=>{const e=await setup();try{assert.equal(e.state().projects.length,3);await e.nav('postes');assert.equal(e.$('#main').querySelectorAll('.role-card').length,10);for(const page of ['taches','dossier','transmissions','decisions','github','prompts','comparateur','sauvegardes','pilotage']){await e.nav(page);assert(e.$('h1')?.textContent,page);}assert.equal(e.$('#notice').hidden,true);}finally{await e.close();}});
+test('boot: dashboard, ten roles, documents and all navigation pages',async()=>{const e=await setup();try{assert.equal(e.state().projects.length,3);await e.nav('postes');assert.equal(e.$('#main').querySelectorAll('.role-card').length,10);for(const page of ['taches','dossier','transmissions','decisions','github','livraison','prompts','comparateur','sauvegardes','pilotage']){await e.nav(page);assert(e.$('h1')?.textContent,page);}assert.equal(e.$('#notice').hidden,true);}finally{await e.close();}});
 test('migration and autosave preserve V1, create backup, survive restart',async()=>{const raw=legacy(),e=await setup(raw);let saved;try{const data=e.state();assert.equal(data.projects[0].context,raw.projects[0].context);assert.deepEqual(JSON.parse(e.window.localStorage.getItem('atelier-ia-before-v2')),raw);assert.equal(data.prompts[0].text,'À conserver');assert.equal(data.comparisons[0].a,'Réponse A');await e.nav('dossier');e.fill('#projectContext','Contexte enrichi sans perdre les données');saved=e.state();assert.equal(saved.projects[0].context,'Contexte enrichi sans perdre les données');assert(e.window.localStorage.getItem('atelier-ia-snapshots-v2'));}finally{await e.close();}const restarted=await setup(saved);try{assert.equal(restarted.state().projects[0].context,'Contexte enrichi sans perdre les données');assert.equal(restarted.state().projects[0].workItems.length,1);}finally{await restarted.close();}});
 async function returnAndReview(e,id){
   await e.click('[data-action="edit-task"][data-id="'+id+'"]');
@@ -104,4 +104,37 @@ test('V2.3 completed task is kept, backed up, excluded from references until rev
     e.fill('#taskStatus','review');await e.submit('#editorForm');await e.click('[data-action="edit-task"][data-id="old-done"]');e.fill('#taskStatus','done');await e.submit('#editorForm');
     assert.equal(e.window.AtelierCore.completedTasks(e.state().projects[0]).length,1);
   }finally{await e.close();}
+});
+
+
+function continuityFixture(){
+  const C=require('../core.js'),raw=legacy();raw.schemaVersion=3;
+  raw.projects[0].workItems=[{...C.proposeTask('Amélioration sauvegarde','programmation'),id:'program',status:'done',legacyCompleted:false,result:'Sauvegarde améliorée',evidence:'Export et import testés',workBranch:'feature/sauvegarde',pullRequest:'https://github.com/me/project/pull/12'}];
+  raw.projects[0].github={owner:'me',repo:'project',branch:'feature/sauvegarde'};return raw;
+}
+test('V3.1 suggestions create one editable task with dependencies and GitHub mission context',async()=>{
+  const e=await setup(continuityFixture());try{
+    assert(e.$('#main').textContent.includes('La suite du projet'));await e.click('[data-action="accept-suggestion"]');assert.equal(e.$('#taskRole').value,'tests');e.fill('#taskTitle','Tests de sauvegarde');await e.submit('#editorForm');
+    let p=e.state().projects[0];assert.equal(p.workItems.length,2);assert.deepEqual(p.workItems[1].dependsOn,['program']);assert.equal(e.$('[data-action="accept-suggestion"]'),null);
+    await e.nav('taches');await e.click('[data-action="edit-task"][data-id="program"]');assert.equal(e.$('#taskWorkBranch').value,'feature/sauvegarde');await e.click('[data-action="task-to-transfer"]');assert(e.$('#transferOutput').value.includes('feature/sauvegarde'));assert(e.$('#transferOutput').value.includes('/pull/12'));
+    await e.nav('taches');await e.click('[data-action="edit-task"][data-id="program"]');e.fill('#taskResult','Résultat repris');await e.submit('#editorForm');p=e.state().projects[0];assert.equal(p.workItems[0].status,'review');assert(e.$('#main').textContent.includes('Prérequis non validé'));
+  }finally{await e.close();}
+});
+test('V3.1 delivery plan saves, downloads and survives full backup restore',async()=>{
+  const raw=continuityFixture(),C=require('../core.js');raw.projects[0].workItems.push({...C.proposeTask('Tests de sauvegarde','tests'),id:'test',status:'done',legacyCompleted:false,result:'Tests réussis',evidence:'Parcours exécuté',dependsOn:['program']});
+  const e=await setup(raw);let backup;try{
+    await e.nav('livraison');e.fill('#releaseVersion','1.5.0');e.fill('#releaseNotes','Nouvelle sauvegarde');e.fill('#releaseRollback','Restaurer 1.4 et le JSON');
+    for(const id of ['backup','scope','tests','rollback'])e.$('#releaseForm input[name="check-'+id+'"]').checked=true;
+    await e.submit('#releaseForm');assert(e.$('#main').textContent.includes('Dossier prêt pour une revue de livraison'));
+    await e.click('[data-action="export-release"]');assert((await e.downloads.at(-1).blob.text()).includes('1.5.0'));await e.click('[data-action="export-all"]');backup=JSON.parse(await e.downloads.at(-1).blob.text());assert(backup.data.projects[0].releasePlan.checks.backup);
+  }finally{await e.close();}
+  const restored=await setup();try{await restored.nav('sauvegardes');await restored.click('[data-action="import-all"]');await restored.upload('#importFile','backup.json',JSON.stringify(backup),'application/json');await restored.nav('livraison');assert.equal(restored.$('#releaseVersion').value,'1.5.0');assert(restored.$('#main').textContent.includes('Dossier prêt pour une revue de livraison'));}finally{await restored.close();}
+});
+test('V3.1 GitHub assistant handles partial reads without writes or false success',async()=>{
+  const calls=[];const e=await setup(continuityFixture(),async(url,opt)=>{
+    calls.push(opt.method);if(url.endsWith('/repos/me/project'))return apiResponse(200,{full_name:'me/project',default_branch:'main'});
+    if(url.includes('/branches?'))return apiResponse(200,[{name:'main'},{name:'feature/sauvegarde'}]);
+    if(url.includes('/pulls?'))return apiResponse(200,[{number:12,title:'Sauvegarde',head:{ref:'feature/sauvegarde'},base:{ref:'main'},draft:true}]);
+    if(url.includes('/check-runs'))return apiResponse(403,{});if(url.endsWith('/status'))return apiResponse(200,{statuses:[]});if(url.endsWith('/releases/latest'))return apiResponse(404,{});throw Error('Unexpected URL '+url);
+  });try{await e.nav('github');await e.click('[data-action="github-overview"]');assert(e.$('#main').textContent.includes('Contrôles non confirmés'));assert(e.$('#main').textContent.includes('Accès refusé'));assert(e.$('#main').textContent.includes('#12'));assert(calls.every(x=>x==='GET'));}finally{await e.close();}
 });
