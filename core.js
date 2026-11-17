@@ -1,6 +1,6 @@
 (function (root) {
   'use strict';
-  const VERSION = '3.2.0';
+  const VERSION = '3.2.1';
   const KEY = 'atelier-ia-v1';
   const uid = () => globalThis.crypto?.randomUUID?.() || 'a-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2);
   const text = v => typeof v === 'string' ? v : (typeof v === 'number' ? String(v) : '');
@@ -131,7 +131,13 @@
     const kinds={programmation:['technical','rules'],design:['design','rules'],medias:['design','sources'],recherche:['sources','rules'],contenus:['brief','sources','rules'],tests:['technical','rules'],usages:['brief','design']};
     return p.documents.filter(d=>d.content.trim()).map(d=>({...d,selected:(kinds[roleId]||['brief','rules']).includes(d.kind)}));
   }
-  function missionPrompt(p,level,roleId,taskId,request,selection,ai='ChatGPT') {
+  function missionPrompt(p,level,roleId,taskId,request,selection,ai='ChatGPT',includeContext=false) {
+    const t=p.workItems.find(t=>t.id===taskId),r=role(t?.role||roleId);
+    const parts=['Mission pour '+ai,r.prompt];
+    if(t){parts.push('## Tâche\n'+t.title);for(const [label,value] of [['Objectif',t.objective],['Éléments utiles à cette tâche',t.inputs],['Résultat attendu',t.deliverable],['Critères de réussite',t.criteria]])if(text(value).trim())parts.push('## '+label+'\n'+value);if(text(t.workBranch).trim())parts.push('Branche de travail : '+t.workBranch);if(text(t.pullRequest).trim())parts.push('Demande de fusion : '+t.pullRequest);}
+    if(text(request).trim())parts.push('## Demande complémentaire\n'+request);
+    if(!t&&!text(request).trim())parts.push('Décris la mission à réaliser.');
+    if(!includeContext)return parts.join('\n\n')+'\n';
     const ids=Array.isArray(selection)?selection:contextChoices(p,roleId).filter(d=>d.selected).map(d=>d.id);
     const selected={...p,documents:p.documents.filter(d=>ids.includes(d.id))};
     return 'Mission pour '+ai+' · préparation locale, sans API IA payante\n'+(ai==='Claude'?'Présente une réponse structurée et des livrables directement réutilisables.':'Avance par étapes concrètes et fournis les livrables ainsi que leurs vérifications.')+'\n'+context(selected,level,roleId,taskId,request)+taskGithub(p,p.workItems.find(t=>t.id===taskId));

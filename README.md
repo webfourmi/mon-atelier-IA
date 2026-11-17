@@ -151,3 +151,10 @@ La liste permet de relire la consigne, vérifier le résultat et corriger une é
 Les boutons Copier/Télécharger exportent le bilan du poste et de l’IA sélectionnés, avec uniquement les missions évaluées, leurs identifiants, résultats, dates, notes et commentaires. Le filtre d’affichage de la liste ne change pas la population du calcul ou de l’export. Les bilans de chaque poste emploient la même règle.
 
 Les préférences et évaluations restent locales, sauvegardées dans le JSON complet. Elles ne sont pas ajoutées au partage du seul dossier commun. Clé de stockage, schéma 3, originaux, dépendances, préparation de livraison et fonctions GitHub restent conservés. Voir [RAPPORT-V3.2.md](RAPPORT-V3.2.md).
+
+
+## V3.2.1 — prompt limité à la tâche
+
+La transmission affiche et copie par défaut uniquement la consigne du poste, le titre, l’objectif, les éléments utiles, le résultat attendu et les critères de la tâche sélectionnée, avec ses éventuels repères de branche/demande de fusion et la demande complémentaire saisie. Le contexte général, les documents, décisions, autres tâches et anciens résultats ne sont plus ajoutés automatiquement. La copie et l’archive utilisent le même texte.
+
+L’ajout du dossier commun reste possible en ouvrant **Ajouter du contexte du projet (facultatif)** puis en cochant explicitement l’option. Ce choix est conservé dans le brouillon courant, mais revient à désactivé lorsqu’une nouvelle tâche est sélectionnée ou préparée. Le mode débutant/avancé et l’ancien niveau de contexte ne l’activent pas automatiquement.
