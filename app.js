@@ -5,7 +5,7 @@
   const SNAP_KEY='atelier-ia-snapshots-v2', BEFORE_KEY='atelier-ia-before-v2';
   let state, lastRaw=null, storageError='', writeLock='', projectId='', page='pilotage', roleId='', docTab='documents', filterRole='',filterOwner='',filterQuery='', sessionToken='',sessionUser='',dbPromise,toastTimer,folderHandle=null,folderAuto=false,folderTimer,folderWriting=false,folderAgain=false;
   let compareDraft={title:'',a:'',b:'',notes:'',verdict:'',scoreA:'',scoreB:''};
-  let transferDraft={from:'ChatGPT',to:'Claude',level:'standard',role:'pilotage',task:'',request:''};
+  let transferDraft={from:'Moi',to:'ChatGPT',level:'standard',role:'pilotage',task:'',request:''};
   const githubCache=new Map(),prepared=new Map(),remoteDossiers=new Map();
   let draftProjectId='';
   const gh=new window.AtelierGitHub(()=>sessionToken);
@@ -211,7 +211,7 @@
   }
   async function readGithubDossier(p){const identity=githubIdentity(p),g=githubSettings(p);if(!g.branch){const m=await gh.repo(g);checkGithubIdentity(p,identity);g.branch=m.default_branch;}const file=await gh.contents(g,g.path);checkGithubIdentity(p,identity);if(!file)throw Error('Il n’y a pas encore de dossier commun à ce chemin.');if(!file.content||file.encoding!=='base64')throw Error('Ce fichier est trop volumineux ou n’est pas lisible comme dossier commun.');const payload=JSON.parse(C.fromBase64(file.content));C.applyShared(p,payload);remoteDossiers.set(p.id,{payload,sha:file.sha,settings:g});render();toast('Dossier distant chargé pour consultation.');}
   function updateTransfer(){const p=current();if(!p)return;const value=C.context(p,transferDraft.level,transferDraft.role,transferDraft.task,transferDraft.request);if($('#transferOutput'))$('#transferOutput').value=value;if($('#transferLength'))$('#transferLength').textContent=value.length.toLocaleString('fr-FR')+' caractères';const a=$('#openAI');if(a){a.href=transferDraft.to==='Claude'?'https://claude.ai':'https://chatgpt.com';a.textContent='Ouvrir '+(transferDraft.to==='Moi'?'ChatGPT':transferDraft.to)+' ↗';}change(()=>p.transferDraft={...transferDraft},false);}
-  function loadProjectDraft(){const p=current();draftProjectId=p?.id||'';transferDraft={from:'ChatGPT',to:'Claude',level:'standard',role:'pilotage',task:'',request:'',...p?.transferDraft};if(!['court','standard','complet'].includes(transferDraft.level))transferDraft.level='standard';transferDraft.role=C.role(transferDraft.role).id;}
+  function loadProjectDraft(){const p=current();draftProjectId=p?.id||'';transferDraft={from:'Moi',to:'ChatGPT',level:'standard',role:'pilotage',task:'',request:'',...p?.transferDraft};if(!['court','standard','complet'].includes(transferDraft.level))transferDraft.level='standard';transferDraft.role=C.role(transferDraft.role).id;}
   async function action(name,el){
     const p=current(),id=el.dataset.id;
     switch(name){
