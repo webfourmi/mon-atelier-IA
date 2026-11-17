@@ -58,3 +58,47 @@ test('V3 context selection, task proposal and normalization are deterministic an
   prompt=C.missionPrompt(p,'standard','medias','','',['technical'],'Claude');assert(!prompt.includes('CHARTE SÉLECTIONNABLE'));assert(prompt.includes('TECHNIQUE SÉLECTIONNABLE'));
   const s=C.normalizeState(C.starter());assert.deepEqual(C.normalizeState(s),s);
 });
+
+
+function validatedTask(id,role='programmation',deps=[]) {return {...C.proposeTask('Mission '+id,role),id,status:'done',legacyCompleted:false,result:'Résultat '+id,evidence:'Contrôles réellement exécutés',dependsOn:deps};}
+test('V3.1 dependencies detect missing, transitive and cyclic prerequisites without losing data',()=>{
+  const a=validatedTask('a'),b=validatedTask('b','tests',['a']),c=validatedTask('c','livraison',['b']);const p=C.normalizeProject({name:'Chaîne',workItems:[a,b,c]});
+  assert.equal(C.dependencyIssues(p,p.workItems[2]).length,0);p.workItems[0].status='review';C.reconcileDependencies(p);
+  assert.equal(p.workItems[1].status,'review');assert.equal(p.workItems[2].status,'review');assert.equal(p.workItems[2].result,'Résultat c');assert.equal(C.completedTasks(p).length,0);
+  p.workItems[0].dependsOn=['missing'];assert(C.dependencyIssues(p,p.workItems[0]).some(x=>x.reason==='Prérequis introuvable'));
+  p.workItems[0].dependsOn=['b'];assert(C.dependencyIssues(p,p.workItems[0]).some(x=>x.reason==='Dépendance circulaire'));
+  assert.throws(()=>C.validateTask(p,p.workItems[2],{...p.workItems[2],status:'doing'}),/prérequis/);
+});
+test('V3.1 suggested relays are explicit, editable and deduplicated',()=>{
+  const p=C.normalizeProject({name:'Relais',workItems:[validatedTask('a')]});const s=C.nextSuggestions(p);assert.equal(s.length,1);assert.equal(s[0].role,'tests');assert.equal(p.workItems.length,1);
+  const t=C.suggestedTask(p,s[0].key);assert.deepEqual(t.dependsOn,['a']);assert(t.inputs.includes('Résultat a'));p.workItems.push(t);assert.equal(C.nextSuggestions(p).length,0);
+  assert.throws(()=>C.suggestedTask(p,s[0].key));t.status='done';t.result='Tests';t.evidence='Succès';assert(C.nextSuggestions(p).some(x=>x.role==='livraison'));
+  p.workItems[0].status='review';assert.equal(C.nextSuggestions(p).length,0);
+});
+test('V3.1 release requires validated tasks, test evidence and renewed signoff after changes',()=>{
+  const p=C.normalizeProject({name:'Livraison',workItems:[validatedTask('a'),validatedTask('b','tests',['a'])]});assert.equal(C.releaseReadiness(p).ready,false);
+  p.releasePlan={version:'1.2.0',rollback:'Restaurer la version précédente et la sauvegarde',checks:Object.fromEntries(C.RELEASE_CHECKS.map(([id])=>[id,true])),reviewSignature:C.releaseSignature(p)};
+  assert.equal(C.releaseReadiness(p).ready,true);assert(C.releaseNotes(p).includes('Résultat a'));
+  const restored=C.normalizeProject(JSON.parse(JSON.stringify(p)));assert.equal(C.releaseReadiness(restored).ready,true);
+  restored.workItems[0].evidence='Nouveaux tests';assert.equal(C.releaseReadiness(restored).ready,false);assert(C.releaseReadiness(restored).missing.some(x=>x.includes('changé')));
+});
+test('V3.1 GitHub overview is GET-only and retains partial permission errors',async()=>{
+  const calls=[];const gh=new GitHub(()=>'',async(url,opt)=>{calls.push({url,opt});if(url.endsWith('/repos/me/project'))return response(200,{default_branch:'main'});if(url.includes('check-runs'))return response(403,{});if(url.endsWith('/releases/latest'))return response(404,{});if(url.includes('/status'))return response(200,{sha:'abc',statuses:[]});return response(200,[]);});
+  const o=await gh.overview({owner:'me',repo:'project',branch:'feature/été'});assert.equal(o.branch,'feature/été');assert(o.errors.checks);assert.equal(o.release,null);assert(calls.every(x=>x.opt.method==='GET'));assert(calls.some(x=>x.url.includes('feature%2F%C3%A9t%C3%A9')));
+  assert.equal(C.githubHealth(o).clear,false);
+});
+test('V3.1 GitHub never treats empty, failed, pending or inconsistent checks as confirmed',()=>{
+  assert.equal(C.githubHealth({}).clear,false);
+  const good={errors:{},status:{sha:'abc',statuses:[]},checks:{check_runs:[{head_sha:'abc',status:'completed',conclusion:'success'}]}};assert(C.githubHealth(good).clear);
+  assert(C.githubHealth({...good,status:{statuses:[{state:'failure'}]}}).failed);
+  assert(C.githubHealth({...good,checks:{check_runs:[{status:'in_progress'}]}}).pending);
+  assert.equal(C.githubHealth({...good,status:{sha:'changed',statuses:[]}}).clear,false);
+  assert.equal(C.githubHealth({...good,errors:{checks:'Interdit'}}).clear,false);
+});
+
+
+test('V3.1 shared dossier keeps the dependency chain and revalidation rules',()=>{
+  const p=C.normalizeProject({name:'Source',workItems:[validatedTask('a'),validatedTask('b','tests',['a'])]});const other=C.normalizeProject({name:'Destination'});
+  const received=C.applyShared(other,C.sharedPayload(p));assert.deepEqual(received.workItems.find(t=>t.id==='b').dependsOn,['a']);assert.equal(C.completedTasks(received).length,2);
+  received.workItems.find(t=>t.id==='a').status='review';C.reconcileDependencies(received);assert.equal(received.workItems.find(t=>t.id==='b').status,'review');assert.equal(C.completedTasks(received).length,0);
+});
