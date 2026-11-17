@@ -1,6 +1,6 @@
 (function (root) {
   'use strict';
-  const VERSION = '2.1.0';
+  const VERSION = '2.2.0';
   const KEY = 'atelier-ia-v1';
   const uid = () => globalThis.crypto?.randomUUID?.() || 'a-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2);
   const text = v => typeof v === 'string' ? v : (typeof v === 'number' ? String(v) : '');
@@ -45,7 +45,7 @@
     }) : q.tasks.split(/\n/).filter(s=>s.trim()).map(s=>({id:uid(),title:s.replace(/^[-•]\s*/,''),role:'pilotage',status:'draft',owner:'Moi',priority:'normal',objective:'',inputs:'',deliverable:'',criteria:'',evidence:'',blocked:'',dependsOn:[],updatedAt:''}));
     q.decisionLog = Array.isArray(p.decisionLog)?p.decisionLog.map(d=>({...d,id:text(d.id)||uid(),text:text(d.text),status:['proposed','validated','retired'].includes(d.status)?d.status:'proposed',date:text(d.date),reason:text(d.reason)})):[];
     q.assets = Array.isArray(p.assets)?p.assets.map(a=>({...a,id:text(a.id)||uid(),name:text(a.name)||'Fichier',size:Number(a.size)||0,type:text(a.type),role:role(a.role||'medias').id,status:ASSET_STATUSES.some(s=>s.id===a.status)?a.status:'available',note:text(a.note),date:text(a.date)})):[];
-    q.handoffs = Array.isArray(p.handoffs)?p.handoffs.map(h=>({...h,id:text(h.id)||uid(),content:text(h.content),title:text(h.title),from:text(h.from),to:text(h.to),date:text(h.date)})):[];
+    q.handoffs = Array.isArray(p.handoffs)?p.handoffs.map(h=>({...h,id:text(h.id)||uid(),content:text(h.content),title:text(h.title),from:text(h.from),to:text(h.to),date:text(h.date),role:ROLES.some(r=>r.id===h.role)?h.role:'',taskId:text(h.taskId),result:text(h.result),notes:text(h.notes),rating:[1,2,3,4,5].includes(Number(h.rating))?Number(h.rating):0,outcome:['pending','done','partial','failed'].includes(h.outcome)?h.outcome:'pending',evaluatedAt:text(h.evaluatedAt)})):[];
     q.github = {owner:text(p.github?.owner),repo:text(p.github?.repo),branch:text(p.github?.branch),path:text(p.github?.path)||'.atelier-ia/dossier-commun.json',lastSync:text(p.github?.lastSync),lastSha:text(p.github?.lastSha)};
     for (const k of ['owner','repo','branch','path']) q.github[k]=text(q.github[k]);
     q.activeVersion=text(p.activeVersion);
