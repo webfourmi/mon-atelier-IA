@@ -46,7 +46,7 @@ test('V3 validated references survive sharing, exclude legacy/returned/review an
   assert.equal(raw.completedTasks[0].result,'RÉSULTAT VALIDÉ');assert.equal(raw.completedTasks[0].resultFiles,'commit abc');
   const target=C.normalizeProject({name:'Autre'});const once=C.applyShared(target,raw);const twice=C.applyShared(once,raw);
   assert.equal(twice.workItems.length,1);assert.equal(C.completedTasks(twice)[0].resultLimits,'Téléphone non testé');
-  const prompt=C.missionPrompt(p,'standard','programmation','','',[],'Claude');assert(prompt.includes('RÉSULTAT VALIDÉ'));assert(!prompt.includes('NE PAS UTILISER'));assert(!prompt.includes('NON VALIDÉ'));
+  const prompt=C.missionPrompt(p,'standard','programmation','','',[],'Claude',true);assert(prompt.includes('RÉSULTAT VALIDÉ'));assert(!prompt.includes('NE PAS UTILISER'));assert(!prompt.includes('NON VALIDÉ'));
   assert(C.markdown(p).includes('Résultat validé : RÉSULTAT VALIDÉ'));
 });
 
@@ -54,8 +54,8 @@ test('V3 context selection, task proposal and normalization are deterministic an
   assert.throws(()=>C.proposeTask('   '));const t=C.proposeTask('Créer une illustration');assert.equal(t.role,'medias');
   const override=C.proposeTask('Créer une illustration','tests','Claude');assert.equal(override.role,'tests');assert.equal(override.owner,'Claude');
   const p=C.starter().projects[0];p.documents.find(d=>d.id==='design').content='CHARTE SÉLECTIONNABLE';p.documents.find(d=>d.id==='technical').content='TECHNIQUE SÉLECTIONNABLE';
-  let prompt=C.missionPrompt(p,'standard','medias','','',undefined,'ChatGPT');assert(prompt.includes('CHARTE SÉLECTIONNABLE'));assert(!prompt.includes('TECHNIQUE SÉLECTIONNABLE'));
-  prompt=C.missionPrompt(p,'standard','medias','','',['technical'],'Claude');assert(!prompt.includes('CHARTE SÉLECTIONNABLE'));assert(prompt.includes('TECHNIQUE SÉLECTIONNABLE'));
+  let prompt=C.missionPrompt(p,'standard','medias','','',undefined,'ChatGPT',true);assert(prompt.includes('CHARTE SÉLECTIONNABLE'));assert(!prompt.includes('TECHNIQUE SÉLECTIONNABLE'));
+  prompt=C.missionPrompt(p,'standard','medias','','',['technical'],'Claude',true);assert(!prompt.includes('CHARTE SÉLECTIONNABLE'));assert(prompt.includes('TECHNIQUE SÉLECTIONNABLE'));
   const s=C.normalizeState(C.starter());assert.deepEqual(C.normalizeState(s),s);
 });
 
@@ -123,4 +123,13 @@ test('V3.2 AI denominators use evaluated missions and optional ratings correctly
 });
 test('V3.2 exported AI report is auditable and excludes incomplete evaluations',()=>{
   const report=C.missionReport(evaluationFixture(),'tests','ChatGPT');assert(report.includes('Mission B [b]'));assert(!report.includes('Mission A'));assert(!report.includes('Ancienne note'));assert(!report.includes('Attente'));assert(report.includes('1 évaluée(s) / 1 archivée(s)'));assert(report.includes('Non notée'));
+});
+
+
+test('task prompt contains only the selected task unless context is explicitly requested',()=>{
+  const p=C.starter().projects[0];p.context='CONTEXTE À EXCLURE';p.decisions='RÈGLE PROJET À EXCLURE';p.documents[0].content='DOCUMENT À EXCLURE';p.workItems=[{...C.proposeTask('Corriger le bouton'),id:'selected',objective:'Objectif précis',inputs:'fichier.js',criteria:'Cliquer fonctionne',result:'ANCIEN RÉSULTAT À EXCLURE',evidence:'ANCIEN TEST À EXCLURE'},validatedTask('AUTRE TÂCHE À EXCLURE')];
+  const prompt=C.missionPrompt(p,'complet','programmation','selected','Tester au clavier',undefined,'Claude');
+  for(const value of ['Corriger le bouton','Objectif précis','fichier.js','Cliquer fonctionne','Tester au clavier','Mission pour Claude'])assert(prompt.includes(value));
+  for(const value of ['CONTEXTE À EXCLURE','RÈGLE PROJET À EXCLURE','DOCUMENT À EXCLURE','AUTRE TÂCHE À EXCLURE','ANCIEN RÉSULTAT À EXCLURE','ANCIEN TEST À EXCLURE',p.name])assert(!prompt.includes(value));
+  assert(C.missionPrompt(p,'complet','programmation','selected','',undefined,'Claude',true).includes('CONTEXTE À EXCLURE'));
 });
