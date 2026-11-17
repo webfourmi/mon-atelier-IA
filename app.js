@@ -237,7 +237,8 @@
   function editor(title,html,submit,readOnly=false){$('#editorTitle').textContent=title;$('#editorBody').innerHTML=html;$('#editorBody').querySelectorAll('select:not([multiple])').forEach(el=>{const selected=el.querySelector('option[selected]');if(selected)el.value=selected.value;});$('#editorForm').classList.toggle('dialog-only-action',readOnly);editorSubmit=submit;$('#editor').showModal();}
   function closeEditor(){$('#editor').close();editorSubmit=null;}
   function editProject(p){editor(p?'Modifier le projet':'Nouveau projet',`<label for="editName">Nom du projet</label><input id="editName" name="name" value="${esc(p?.name||'')}" required autofocus><label for="editDesc">Description courte</label><input id="editDesc" name="description" value="${esc(p?.description||'')}"><label for="projectType">Type de projet</label><select id="projectType" name="projectType">${Object.entries(C.TEMPLATES).map(([id,t])=>`<option value="${id}" ${(p?.projectType||'general')===id?'selected':''}>${esc(t.name)}</option>`).join('')}</select><label for="editVersion">Version actuellement publiée</label><input id="editVersion" name="version" value="${esc(p?.activeVersion||'')}" placeholder="Ex. 0.12.0"><p class="help">La version est un repère de suivi, elle ne déclenche pas de publication.</p>`,fd=>{if(!fd.get('name').trim())throw Error('Donne un nom au projet.');change(()=>{if(p){p.name=fd.get('name').trim();p.description=fd.get('description');p.activeVersion=fd.get('version');p.projectType=fd.get('projectType');}else{const q=C.normalizeProject({id:C.uid(),name:fd.get('name').trim(),description:fd.get('description'),activeVersion:fd.get('version'),projectType:fd.get('projectType')});state.projects.push(q);projectId=q.id;}});});}
-  function editTask(p,t=null,selectedRole='pilotage',seed=null){
+  function editTaskAdvanced(p,t=null,selectedRole='pilotage',seed=null){
+    $('#editor').dataset.taskId='';
     const item=t||seed||{id:'',title:'',assetIds:[],role:selectedRole,status:'draft',owner:C.role(selectedRole).primaryAI,priority:'normal',objective:'',inputs:'',deliverable:C.role(selectedRole).output,criteria:C.makeTask(p,'Mission',selectedRole).criteria,evidence:'',blocked:'',dependsOn:[]};
     editor(t?'Ouvrir la tâche':'Confier une nouvelle tâche',`
       <label for="taskTitle">Titre de la tâche</label><input id="taskTitle" name="title" value="${esc(item.title)}" required autofocus>
@@ -266,6 +267,43 @@
       if(next.status==='done'&&(next.blocked||C.unresolved(p,next).length))throw Error('Lève le blocage et termine les tâches nécessaires avant de clôturer celle-ci.');
       change(()=>{if(t)Object.assign(t,next);else p.workItems.push(next);});if(next.status==='done'&&item.status!=='done')toast('Tâche validée : livrable ajouté au dossier commun du projet.');
     });
+  }
+  // Fiche quotidienne réduite aux trois informations utiles.
+  // Les informations historiques et techniques restent dans la tâche.
+  function saveSimpleTask(p,t,fd,finish=false){
+    const title=String(fd.get('title')||'').trim(),problem=String(fd.get('problem')||'').trim(),solution=String(fd.get('solution')||'').trim();
+    if(!title)throw Error('Indique le nom de la tâche.');
+    if(finish&&!solution)throw Error('Indique la solution avant de terminer la tâche.');
+    const previous=t||C.makeTask(p,problem||title);
+    const next={...previous,id:previous.id||C.uid(),title,objective:problem,
+      result:solution,updatedAt:now()};
+    if(!t)next.status='draft';
+    if(finish){
+      if(next.blocked||C.unresolved(p,next).length)throw Error('Cette tâche comporte un blocage ou des prérequis non terminés. Résous-les avant de la valider.');
+      next.status='done';next.validationVersion=3;next.legacyCompleted=false;
+      next.criteria=next.criteria||'Solution jugée satisfaisante par l’utilisateur.';
+      next.evidence='Validation manuelle par l’utilisateur. Aucun test technique déclaré dans cette fiche simplifiée.';
+      next.completedAt=now();next.invalidatedReason='';
+    }else if(t&&C.isValidated(t)&&(title!==t.title||problem!==t.objective||solution!==t.result)){
+      next.status='review';next.completedAt='';next.validationVersion=0;
+    }
+    if(!change(()=>{if(t)Object.assign(t,next);else p.workItems.push(next);}))return false;
+    if(finish)toast('Tâche validée : la solution rejoint le dossier commun.');
+    return true;
+  }
+  function editTask(p,t=null,selectedRole='pilotage',seed=null){
+    const item=t||seed||C.makeTask(p,'',selectedRole);
+    editor(t?'Tâche · '+t.title:'Nouvelle tâche',
+      '<p class="help">L’essentiel : le nom, le problème et la solution. Les paramètres techniques sont conservés dans les options avancées.</p>'+
+      '<label for="simpleTaskTitle">Nom de la tâche</label><input id="simpleTaskTitle" name="title" value="'+esc(item.title||'')+'" required autofocus>'+
+      '<label for="simpleTaskProblem">Problème</label><textarea id="simpleTaskProblem" name="problem" placeholder="Ce qui ne fonctionne pas ou ce que tu souhaites améliorer…">'+esc(item.objective||'')+'</textarea>'+
+      '<label for="simpleTaskSolution">Solution</label><textarea id="simpleTaskSolution" name="solution" placeholder="La correction ou le résultat obtenu…">'+esc(item.result||'')+'</textarea>'+
+      '<p class="help">Une tâche terminée est validée manuellement. Aucun test technique ne sera considéré comme effectué automatiquement.</p>'+
+      '<div class="toolbar">'+btn('complete-simple-task',t&&C.isValidated(t)?'Valider à nouveau':'✓ Terminer la tâche','primary')+
+      (t?btn('task-to-transfer','Préparer le prompt','small', 'data-id="'+esc(t.id)+'"'):'')+
+      btn('advanced-task','Options avancées','small ghost',t?'data-id="'+esc(t.id)+'"':'')+'</div>',
+      fd=>saveSimpleTask(p,t,fd,false));
+    $('#editor').dataset.taskId=t?.id||'';
   }
   function editDocument(p,d){editor(d?'Document de référence':'Ajouter un document',`<label for="documentTitle">Titre</label><input id="documentTitle" name="title" value="${esc(d?.title||'')}" required><label for="documentContent">Contenu de référence</label><textarea id="documentContent" name="content" class="tall">${esc(d?.content||'')}</textarea>`,fd=>{if(!fd.get('title').trim())throw Error('Donne un titre au document.');change(()=>{if(d){d.title=fd.get('title').trim();d.content=fd.get('content');d.updatedAt=now();}else p.documents.push({id:C.uid(),title:fd.get('title').trim(),kind:'note',content:fd.get('content'),updatedAt:now()});});});}
   function editDecision(p,d){editor(d?'Modifier la décision':'Consigner une décision',`<label for="decisionText">Décision ou proposition</label><textarea id="decisionText" name="text" required autofocus>${esc(d?.text||'')}</textarea><label for="decisionReason">Pourquoi ce choix ?</label><textarea id="decisionReason" name="reason">${esc(d?.reason||'')}</textarea><label for="decisionStatus">État de la décision</label><select id="decisionStatus" name="status">${[['proposed','Proposée · à examiner'],['validated','Validée · fait référence'],['retired','Remplacée / retirée']].map(([v,n])=>`<option value="${v}" ${d?.status===v?'selected':''}>${n}</option>`).join('')}</select>`,fd=>{if(!fd.get('text').trim())throw Error('Renseigne la décision.');change(()=>{const value={text:fd.get('text').trim(),reason:fd.get('reason'),status:fd.get('status'),date:now()};if(d)Object.assign(d,value);else p.decisionLog.unshift({id:C.uid(),...value});});});}
@@ -369,6 +407,20 @@
       case 'open-project':setProject(id);loadProjectDraft();navigate('pilotage');break;
       case 'duplicate-project':if(editable()){const original=state.projects.find(x=>x.id===id);change(()=>{const q=C.clone(original);q.id=C.uid();q.name+=' (copie)';q.github.path='.atelier-ia/'+C.slug(q.id)+'/dossier-commun.json';delete q.github.lastSync;delete q.github.lastSha;state.projects.push(q);projectId=q.id;});loadProjectDraft();toast('Projet dupliqué.');}break;
       case 'delete-project':{const target=state.projects.find(x=>x.id===id);if(target&&editable()&&confirm('Supprimer le projet « '+target.name+' » ? Une copie des textes sera conservée.')){snapshot(true);change(()=>{state.projects=state.projects.filter(x=>x.id!==id);projectId=state.projects[0]?.id||'';});loadProjectDraft();}break;}
+      case 'complete-simple-task':{
+        if(!editable())break;
+        const fd=new FormData($('#editorForm'));if(!String(fd.get('title')||'').trim())throw Error('Indique le nom de la tâche.');
+        const existing=($('#editor').dataset.taskId||'')?p.workItems.find(t=>t.id===$('#editor').dataset.taskId):null;
+        if(saveSimpleTask(p,existing,fd,true))closeEditor();
+        break;
+      }
+      case 'advanced-task':{
+        if(!confirm('Passer à la fiche avancée ? Les modifications non enregistrées dans cette fenêtre ne seront pas conservées.'))break;
+        const existing=($('#editor').dataset.taskId||'')?p.workItems.find(t=>t.id===$('#editor').dataset.taskId):null;
+        const title=$('#simpleTaskTitle')?.value||'';
+        closeEditor();editTaskAdvanced(p,existing,el.dataset.role||roleId||filterRole||'pilotage',existing?null:{...C.makeTask(p,title),title});
+        break;
+      }
       case 'new-task':if(editable())editTask(p,null,el.dataset.role||roleId||filterRole||'pilotage');break;
       case 'edit-task':if(editable())editTask(p,p.workItems.find(t=>t.id===id));break;
       case 'delete-task':{const t=p.workItems.find(x=>x.id===id);if(t&&confirm('Supprimer cette tâche ? Les tâches qui en dépendent seront signalées comme bloquées.')){change(()=>{p.workItems=p.workItems.filter(x=>x.id!==id);for(const x of p.workItems)if(x.dependsOn.includes(id)){x.dependsOn=x.dependsOn.filter(d=>d!==id);x.blocked=x.blocked||'Prérequis supprimé : '+t.title+'. Revoir cette dépendance.';if(x.status==='done')x.status='review';}});closeEditor();}break;}
