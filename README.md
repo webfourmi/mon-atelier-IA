@@ -225,3 +225,7 @@ Chaque équipe conserve une copie du modèle utilisé. Modifier/archiver le mod�
 La bibliothèque des circuits est incluse dans la sauvegarde complète de l’atelier. L’export de projet conserve les équipes utilisées et leurs étapes, mais pas toute la bibliothèque globale ; ces copies restent réutilisables. Le dossier commun partagé garde sa portée de références validées. La restauration conserve aussi les liens entre tâches, fiches d’origine et pièces jointes réidentifiées.
 
 Les circuits organisent des relais séquentiels. Ils ne lancent pas plusieurs IA automatiquement, n’envoient aucun message et ne nécessitent aucune API payante. Voir [RAPPORT-V3.4.md](RAPPORT-V3.4.md).
+
+## Fiche tâche simplifiée
+
+La fiche de tâche par défaut contient uniquement **Nom de la tâche**, **Problème** et **Solution**. Le bouton « Terminer la tâche » demande une solution et enregistre une validation manuelle explicite sans revendiquer de tests techniques. Les anciens champs et le circuit détaillé restent accessibles dans « Options avancées ». Une modification de la solution d’une tâche validée invalide la validation précédente. Les métadonnées et fichiers existants sont conservés.
