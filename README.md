@@ -1,4 +1,4 @@
-# Mon Atelier IA · V2.2
+# Mon Atelier IA · V2.3
 
 Un atelier personnel pour organiser les projets menés avec ChatGPT et Claude : dix postes de travail, un dossier commun et un suivi clair des tâches, décisions, fichiers et versions.
 
@@ -73,3 +73,7 @@ Chaque poste affiche une IA principale et une IA de contrôle. ChatGPT est propo
 ## Historique et appréciation des IA (V2.2)
 
 Chaque transmission archivée conserve désormais son poste, la tâche associée et l'IA destinataire. Depuis le poste ou les transmissions, « Résultat / évaluation » permet de noter le livrable, le statut (en attente, réussi, partiel, non satisfaisant), une appréciation personnelle de 1 à 5 et les corrections utiles. Les postes affichent un historique et des bilans séparés ChatGPT/Claude, sans classement automatique arbitraire. Les anciennes transmissions restent intactes et apparaissent sans poste attribué si l'ancienne sauvegarde ne le précisait pas. Le bilan est local ; aucune donnée n'est automatiquement envoyée aux IA.
+
+## Livrables terminés et dossier commun (V2.3)
+
+Une tâche passée au statut « Terminé » rejoint automatiquement l'onglet « Livrables terminés » du Dossier commun. Elle y est présentée avec son objectif, son résultat attendu, sa vérification, sa date et ses fichiers associés depuis le catalogue de médias. La tâche reste modifiable dans son poste et dans le tableau des tâches, sans copie en double. L'export DOSSIER_COMMUN.md, l'export ZIP et le JSON partagé GitHub incluent ces livrables. Lors de la reprise d'un dossier partagé GitHub, les tâches terminées inédites sont ajoutées sans écraser celles déjà présentes localement. Un changement local n'effectue pas de commit GitHub implicite : utiliser l'aperçu puis la publication confirmée dans l'onglet GitHub. Les pièces jointes ne sont pas envoyées avec le JSON GitHub ; le ZIP et la sauvegarde locale conservent leurs originaux.
