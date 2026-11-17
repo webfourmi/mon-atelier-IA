@@ -1,4 +1,4 @@
-# Mon Atelier IA · V3.0 — phase 1 (branche de travail)
+# Mon Atelier IA · V3.0 — phase 1
 
 Un atelier personnel pour organiser les projets menés avec ChatGPT et Claude : dix postes de travail, un dossier commun et un suivi clair des tâches, décisions, fichiers et versions.
 

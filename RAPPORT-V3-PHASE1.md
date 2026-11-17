@@ -38,4 +38,4 @@ Le routage des idées et le choix de contexte utilisent des mots-clés et catég
 
 Les phases suivantes (assistant GitHub avancé, détection des tâches suivantes, modes débutant/avancé complets) ne sont pas incluses. Les fonctions GitHub existantes restent disponibles.
 
-**Décision : conserver la branche de travail et une proposition de fusion en brouillon. Aucune fusion ni publication sur main**, en raison du contrôle visuel réel restant à faire. Conserver une sauvegarde V2.3 pour revenir à l’ancienne version ; elle ne connaît pas l’état Travail rendu.
+**Décision initiale : conserver la branche de travail en attendant la décision de mise à jour. Après un nouveau passage des 29 tests et des contrôles de syntaxe, l’utilisateur a demandé la mise à jour sur main. La fusion est autorisée ; le contrôle visuel réel reste non confirmé. Conserver une sauvegarde V2.3 pour revenir à l’ancienne version ; elle ne connaît pas l’état Travail rendu.
