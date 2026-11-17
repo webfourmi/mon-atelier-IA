@@ -1,6 +1,6 @@
 (function (root) {
   'use strict';
-  const VERSION = '2.3.0';
+  const VERSION = '3.0.0-phase1';
   const KEY = 'atelier-ia-v1';
   const uid = () => globalThis.crypto?.randomUUID?.() || 'a-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2);
   const text = v => typeof v === 'string' ? v : (typeof v === 'number' ? String(v) : '');
@@ -25,7 +25,7 @@
     livraison:['ChatGPT','Claude'],optimisation:['ChatGPT','Claude']
   };
   ROLES.forEach(r=>{[r.primaryAI,r.reviewAI]=AI_ASSIGNMENTS[r.id];});
-  const STATUSES = [{id:'draft',name:'À préparer'},{id:'ready',name:'Prêt'},{id:'doing',name:'En cours'},{id:'review',name:'À vérifier'},{id:'done',name:'Terminé'}];
+  const STATUSES = [{id:'draft',name:'À préparer'},{id:'ready',name:'Prêt'},{id:'doing',name:'En cours'},{id:'returned',name:'Travail rendu'},{id:'review',name:'À vérifier'},{id:'done',name:'Validé'}];
   const ASSET_STATUSES = [{id:'available',name:'À valider'},{id:'validated',name:'Validé'},{id:'integrated',name:'Intégré'},{id:'tested',name:'Vérifié en place'}];
   const DEFAULT_DOCS = [
     {id:'brief',title:'Cap & objectifs',kind:'brief',content:''},
@@ -41,8 +41,8 @@
     q.documents = Array.isArray(p.documents) ? p.documents.map(d=>({id:text(d.id)||uid(),title:text(d.title)||'Document',kind:text(d.kind)||'note',content:text(d.content),updatedAt:text(d.updatedAt)})) : clone(DEFAULT_DOCS);
     q.workItems = Array.isArray(p.workItems) ? p.workItems.map(t=>{
       if (!t || typeof t!=='object' || !text(t.title).trim()) throw Error('Une tâche n’a pas de titre.');
-      return {...t,id:text(t.id)||uid(),title:text(t.title),role:role(t.role).id,status:STATUSES.some(s=>s.id===t.status)?t.status:'draft',owner:text(t.owner)||'Moi',priority:['high','normal','low'].includes(t.priority)?t.priority:'normal',objective:text(t.objective),inputs:text(t.inputs),deliverable:text(t.deliverable),criteria:text(t.criteria),evidence:text(t.evidence),blocked:text(t.blocked),dependsOn:Array.isArray(t.dependsOn)?t.dependsOn.map(text):[],assetIds:Array.isArray(t.assetIds)?t.assetIds.map(text):[],completedAt:t.status==='done'?(text(t.completedAt)||text(t.updatedAt)):text(t.completedAt),updatedAt:text(t.updatedAt)};
-    }) : q.tasks.split(/\n/).filter(s=>s.trim()).map(s=>({id:uid(),title:s.replace(/^[-•]\s*/,''),role:'pilotage',status:'draft',owner:'Moi',priority:'normal',objective:'',inputs:'',deliverable:'',criteria:'',evidence:'',blocked:'',dependsOn:[],updatedAt:''}));
+      return {...t,validationVersion:t.validationVersion===3?3:0,legacyCompleted:t.legacyCompleted===true||(t.status==='done'&&t.validationVersion!==3),id:text(t.id)||uid(),title:text(t.title),role:role(t.role).id,status:STATUSES.some(s=>s.id===t.status)?t.status:'draft',owner:text(t.owner)||'Moi',priority:['high','normal','low'].includes(t.priority)?t.priority:'normal',objective:text(t.objective),inputs:text(t.inputs),deliverable:text(t.deliverable),criteria:text(t.criteria),evidence:text(t.evidence),blocked:text(t.blocked),dependsOn:Array.isArray(t.dependsOn)?t.dependsOn.map(text):[],assetIds:Array.isArray(t.assetIds)?t.assetIds.map(text):[],completedAt:t.status==='done'?(text(t.completedAt)||text(t.updatedAt)):text(t.completedAt),updatedAt:text(t.updatedAt)};
+    }) : q.tasks.split(/\n/).filter(s=>s.trim()).map(s=>({id:uid(),title:s.replace(/^[-•]\s*/,''),role:'pilotage',status:'draft',owner:'Moi',priority:'normal',objective:'',inputs:'',deliverable:'',criteria:'',evidence:'',blocked:'',dependsOn:[],assetIds:[],completedAt:'',validationVersion:0,legacyCompleted:false,updatedAt:''}));
     q.decisionLog = Array.isArray(p.decisionLog)?p.decisionLog.map(d=>({...d,id:text(d.id)||uid(),text:text(d.text),status:['proposed','validated','retired'].includes(d.status)?d.status:'proposed',date:text(d.date),reason:text(d.reason)})):[];
     q.assets = Array.isArray(p.assets)?p.assets.map(a=>({...a,id:text(a.id)||uid(),name:text(a.name)||'Fichier',size:Number(a.size)||0,type:text(a.type),role:role(a.role||'medias').id,status:ASSET_STATUSES.some(s=>s.id===a.status)?a.status:'available',note:text(a.note),date:text(a.date)})):[];
     q.handoffs = Array.isArray(p.handoffs)?p.handoffs.map(h=>({...h,id:text(h.id)||uid(),content:text(h.content),title:text(h.title),from:text(h.from),to:text(h.to),date:text(h.date),role:ROLES.some(r=>r.id===h.role)?h.role:'',taskId:text(h.taskId),result:text(h.result),notes:text(h.notes),rating:[1,2,3,4,5].includes(Number(h.rating))?Number(h.rating):0,outcome:['pending','done','partial','failed'].includes(h.outcome)?h.outcome:'pending',evaluatedAt:text(h.evaluatedAt)})):[];
@@ -53,7 +53,7 @@
   }
   function normalizeState(raw) {
     if (!raw || typeof raw!=='object' || !Array.isArray(raw.projects) || !Array.isArray(raw.prompts) || !Array.isArray(raw.comparisons)) throw Error('Format de sauvegarde non reconnu.');
-    const out={...raw,schemaVersion:2,projects:raw.projects.map(normalizeProject),prompts:raw.prompts.map(p=>({...p,id:text(p.id)||uid(),title:text(p.title)||'Prompt',text:text(p.text)})),comparisons:raw.comparisons.map(c=>({...c,id:text(c.id)||uid(),title:text(c.title)||'Comparaison',a:text(c.a),b:text(c.b),date:text(c.date)})),updatedAt:text(raw.updatedAt)};
+    const out={...raw,schemaVersion:3,projects:raw.projects.map(normalizeProject),prompts:raw.prompts.map(p=>({...p,id:text(p.id)||uid(),title:text(p.title)||'Prompt',text:text(p.text)})),comparisons:raw.comparisons.map(c=>({...c,id:text(c.id)||uid(),title:text(c.title)||'Comparaison',a:text(c.a),b:text(c.b),date:text(c.date)})),updatedAt:text(raw.updatedAt)};
     for(const group of [out.projects,out.prompts,out.comparisons]) { const ids=new Set(); for(const x of group){if(ids.has(x.id))x.id=uid();ids.add(x.id);} }
     return out;
   }
@@ -75,10 +75,10 @@
   }
   function safePath(value) {const v=text(value).trim();if(!v||v.startsWith('/')||v.includes('\\')||v.split('/').some(x=>!x||x==='.'||x==='..')||/[\x00-\x1f?#]/.test(v))throw Error('Le chemin du fichier GitHub est invalide.');return v;}
   function completedTasks(p) {
-    return p.workItems.filter(t=>t.status==='done').map(t=>({
+    return p.workItems.filter(t=>t.status==='done'&&t.validationVersion===3).map(t=>({
       id:t.id,title:t.title,role:t.role,owner:t.owner,objective:t.objective,
-      deliverable:t.deliverable,criteria:t.criteria,evidence:t.evidence,
-      completedAt:t.completedAt||t.updatedAt||'',
+      deliverable:t.deliverable,result:text(t.result),resultFiles:text(t.resultFiles),resultLimits:text(t.resultLimits),criteria:t.criteria,evidence:t.evidence,
+      validationVersion:3,completedAt:t.completedAt||t.updatedAt||'',
       files:(t.assetIds||[]).map(id=>p.assets.find(a=>a.id===id)).filter(Boolean).map(a=>({id:a.id,name:a.name,status:a.status,note:a.note}))
     }));
   }
@@ -89,8 +89,8 @@
     if(!raw||raw.format!=='mon-atelier-ia-dossier'||raw.version!==2||!raw.project||!Array.isArray(raw.documents)||!Array.isArray(raw.decisions))throw Error('Ce fichier n’est pas un dossier commun compatible.');
     const existing=new Set(p.workItems.map(t=>t.id));
     const received=Array.isArray(raw.completedTasks)?raw.completedTasks.filter(t=>t&&typeof t==='object'&&text(t.id)&&text(t.title)&&!existing.has(t.id)).map(t=>({
-      id:t.id,title:t.title,role:t.role,status:'done',owner:t.owner,
-      objective:t.objective,deliverable:t.deliverable,criteria:t.criteria,evidence:t.evidence,
+      id:t.id,title:t.title,role:t.role,status:'done',validationVersion:t.validationVersion===3?3:0,owner:t.owner,
+      objective:t.objective,deliverable:t.deliverable,result:text(t.result),resultFiles:text(t.resultFiles),resultLimits:text(t.resultLimits),criteria:t.criteria,evidence:t.evidence,
       completedAt:t.completedAt,updatedAt:t.completedAt,assetIds:[]
     })):[];
     const next=normalizeProject({...p,context:text(raw.project.context),decisions:text(raw.project.decisions),documents:raw.documents,decisionLog:raw.decisions,workItems:[...p.workItems,...received]});
@@ -100,8 +100,8 @@
     const sections=[`# ${p.name}`,p.description,`## Objectif et contexte\n${p.context||'À préciser.'}`,`## Contraintes et décisions conservées\n${p.decisions||'À préciser.'}`];
     for(const d of p.documents)sections.push(`## ${d.title}\n${d.content||'À compléter.'}`);
     sections.push('## Journal des décisions\n'+(p.decisionLog.map(d=>`- [${d.status}] ${d.text}${d.reason?' — '+d.reason:''}`).join('\n')||'Aucune décision ajoutée.'));
-    sections.push('## Travail en cours\n'+(p.workItems.map(t=>`- [${STATUSES.find(s=>s.id===t.status)?.name}] ${t.title} — ${role(t.role).name} / ${t.owner}${t.blocked?' — Blocage : '+t.blocked:''}\n  Résultat attendu : ${t.deliverable||'À préciser.'}\n  Vérification : ${t.criteria||'À préciser.'}${t.evidence?'\n  Résultat observé : '+t.evidence:''}`).join('\n')||'Aucune tâche.'));
-    sections.push('## Livrables terminés\n'+(completedTasks(p).map(t=>`### ${t.title}\nPoste : ${role(t.role).name} | Réalisé par : ${t.owner} | Date : ${t.completedAt||'Non renseignée'}\nObjectif : ${t.objective||'Non renseigné'}\nLivrable : ${t.deliverable||'Non renseigné'}\nCritères : ${t.criteria||'Non renseignés'}\nVérifications : ${t.evidence||'Non renseignées'}\nFichiers liés : ${t.files.map(f=>f.name).join(', ')||'Aucun'}`).join('\n\n')||'Aucun livrable terminé.'));
+    sections.push('## Travail en cours\n'+(p.workItems.map(t=>`- [${t.legacyCompleted?'Ancienne tâche terminée · à revérifier':STATUSES.find(s=>s.id===t.status)?.name}] ${t.title} — ${role(t.role).name} / ${t.owner}${t.blocked?' — Blocage : '+t.blocked:''}\n  Résultat attendu : ${t.deliverable||'À préciser.'}\n  Vérification : ${t.criteria||'À préciser.'}${t.evidence?'\n  Résultat observé : '+t.evidence:''}`).join('\n')||'Aucune tâche.'));
+    sections.push('## Livrables validés\n'+(completedTasks(p).map(t=>`### ${t.title}\nPoste : ${role(t.role).name} | Réalisé par : ${t.owner} | Date : ${t.completedAt||'Non renseignée'}\nObjectif : ${t.objective||'Non renseigné'}\nLivrable attendu : ${t.deliverable||'Non renseigné'}\nRésultat validé : ${t.result||'Non renseigné'}\nRéférences de livraison : ${t.resultFiles||'Non renseignées'}\nLimites : ${t.resultLimits||'Non renseignées'}\nCritères : ${t.criteria||'Non renseignés'}\nVérifications : ${t.evidence||'Non renseignées'}\nFichiers liés : ${t.files.map(f=>f.name).join(', ')||'Aucun'}`).join('\n\n')||'Aucun livrable terminé.'));
     sections.push('## Fichiers et médias\n'+(p.assets.map(a=>`- ${a.name} — ${ASSET_STATUSES.find(s=>s.id===a.status)?.name}${a.note?' — '+a.note:''}`).join('\n')||'Aucun fichier.'));
     sections.push(`## Version et dépôt\nVersion : ${p.activeVersion||'Non renseignée'}\nDépôt : ${p.github.owner&&p.github.repo?'https://github.com/'+p.github.owner+'/'+p.github.repo:'Non associé'}`);
     return sections.join('\n\n')+'\n';
@@ -113,14 +113,42 @@
     const task=t?`\n## Tâche confiée\n${t.title}\nObjectif : ${t.objective}\nÉléments à consulter : ${t.inputs}\nRésultat attendu : ${t.deliverable}\nCritères de vérification : ${t.criteria}\nRésultat observé : ${t.evidence}\nBlocage : ${t.blocked||'Aucun déclaré'}\n`:'';
     const docs=p.documents.filter(d=>d.content.trim());
     let extra='';
-    if(level!=='court')extra='\n## Décisions validées\n'+decisions+'\n'+docs.map(d=>`\n## ${d.title}\n${d.content}`).join('\n')+'\n## Livrables déjà terminés\n'+completedTasks(p).map(t=>'- '+t.title+' ('+t.owner+') : '+(t.deliverable||'livrable non précisé')).join('\n');
+    if(level!=='court')extra='\n## Décisions validées\n'+decisions+'\n'+docs.map(d=>`\n## ${d.title}\n${d.content}`).join('\n')+'\n## Livrables déjà validés\n'+completedTasks(p).map(t=>'- '+t.title+' ('+t.owner+') : '+(t.result||'résultat non précisé')).join('\n');
     if(level==='complet')extra+='\n## Suivi de toutes les tâches\n'+p.workItems.map(t=>`${t.title} | ${role(t.role).name} | ${t.status} | ${t.blocked||''}`).join('\n')+'\n\n## Catalogue des fichiers\n'+p.assets.map(a=>`${a.name} (${a.status}) : ${a.note}`).join('\n');
     const limit=level==='court'?2000:level==='standard'?10000:50000;
     let body=head+extra;
     if(body.length>limit)body=body.slice(0,limit)+'\n[Contexte abrégé ; consulter le dossier commun pour la suite.]\n';
     return body+task+(request?'\n## Demande actuelle\n'+request+'\n':'')+'\n## Transmission attendue\nIndique le résultat produit, les fichiers concernés, les vérifications réellement faites et ce que le prochain poste doit reprendre. Ne présente pas une proposition comme une décision validée.\n';
   }
-  function unresolved(p,t) {return t.dependsOn.map(id=>p.workItems.find(x=>x.id===id)).filter(x=>x&&x.status!=='done');}
+
+  function proposeTask(idea, roleId='', ai='') {
+    const objective=text(idea).trim();if(!objective)throw Error('Décris ton idée.');
+    const rules=[['tests',/test|vérifi|anomal|régression/i],['medias',/illustr|image|photo|aquarelle|audio/i],['contenus',/cours|texte|dialogue|rédig|pédagog/i],['design',/couleur|charte|typograph|maquette/i],['usages',/parcours|navigation|ergonom/i],['livraison',/publier|livraison|version/i],['recherche',/source|recherche|documentation/i],['programmation',/code|fonction|ajout|corrig|amélior|application/i]];
+    const r=role(roleId||rules.find(([,re])=>re.test(objective))?.[0]||'pilotage');
+    return {id:uid(),title:objective.slice(0,100),objective,role:r.id,owner:ai||r.primaryAI,status:'ready',priority:'normal',inputs:'Consulter le contexte sélectionné et les fichiers joints.',deliverable:r.output,criteria:'Le résultat répond à la demande.\nLes données et fonctions existantes sont conservées.\nLes vérifications effectuées et les limites sont décrites.',evidence:'',blocked:'',dependsOn:[],assetIds:[],updatedAt:new Date().toISOString(),validationVersion:3};
+  }
+  function contextChoices(p,roleId) {
+    const kinds={programmation:['technical','rules'],design:['design','rules'],medias:['design','sources'],recherche:['sources','rules'],contenus:['brief','sources','rules'],tests:['technical','rules'],usages:['brief','design']};
+    return p.documents.filter(d=>d.content.trim()).map(d=>({...d,selected:(kinds[roleId]||['brief','rules']).includes(d.kind)}));
+  }
+  function missionPrompt(p,level,roleId,taskId,request,selection,ai='ChatGPT') {
+    const ids=Array.isArray(selection)?selection:contextChoices(p,roleId).filter(d=>d.selected).map(d=>d.id);
+    const selected={...p,documents:p.documents.filter(d=>ids.includes(d.id))};
+    return 'Mission pour '+ai+' · préparation locale, sans API IA payante\n'+(ai==='Claude'?'Présente une réponse structurée et des livrables directement réutilisables.':'Avance par étapes concrètes et fournis les livrables ainsi que leurs vérifications.')+'\n'+context(selected,level,roleId,taskId,request);
+  }
+  function validateTask(p,previous,next) {
+    if(next.status==='review'&& !['returned','review','done'].includes(previous.status))throw Error('Enregistre d’abord le retour de mission dans « Travail rendu ».');
+    if(next.status==='done') {
+      if(previous.status!=='review'&&(previous.status!=='done'||previous.validationVersion!==3))throw Error('Passe par « À vérifier » avant de valider.');
+      if(!text(next.result).trim()||!text(next.evidence).trim()||!text(next.criteria).trim())throw Error('Renseigne le résultat, les critères et les vérifications avant validation.');
+      if(next.blocked||unresolved(p,next).length)throw Error('Résous les blocages et prérequis avant validation.');
+      if(previous.status==='done'&&['title','result','resultFiles','resultLimits','evidence','criteria','objective','deliverable','role','owner','inputs','blocked','assetIds','dependsOn'].some(k=>JSON.stringify(previous[k])!==JSON.stringify(next[k]))) {
+        next.status='review';next.completedAt='';
+      } else {next.validationVersion=3;next.legacyCompleted=false;}
+    }
+    return next;
+  }
+  function unresolved(p,t) {return t.dependsOn.map(id=>p.workItems.find(x=>x.id===id)).filter(x=>x&&(x.status!=='done'||x.validationVersion!==3));}
   function utf8Base64(s) {const b=new TextEncoder().encode(s);let binary='';for(let i=0;i<b.length;i+=8192)binary+=String.fromCharCode(...b.subarray(i,i+8192));return btoa(binary);}
   function fromBase64(s) {const str=atob(s.replace(/\s/g,''));return new TextDecoder('utf-8',{fatal:true}).decode(Uint8Array.from(str,c=>c.charCodeAt(0)));}
   const crcTable=Array.from({length:256},(_,n)=>{for(let k=0;k<8;k++)n=(n&1)?0xedb88320^(n>>>1):n>>>1;return n>>>0;});
@@ -133,7 +161,7 @@
     }
     const size=central.reduce((n,c)=>n+c.length,0),end=new Uint8Array(22),v=new DataView(end.buffer);v.setUint32(0,0x06054b50,true);v.setUint16(8,files.length,true);v.setUint16(10,files.length,true);v.setUint32(12,size,true);v.setUint32(16,offset,true);return new Blob([...chunks,...central,end],{type:'application/zip'});
   }
-  const api={VERSION,KEY,ROLES,completedTasks,STATUSES,ASSET_STATUSES,DEFAULT_DOCS,uid,text,clone,role,normalizeProject,normalizeState,starter,slug,safeFilename,parseRepo,safePath,sharedPayload,applyShared,markdown,context,unresolved,utf8Base64,fromBase64,makeZip};
+  const api={proposeTask,contextChoices,missionPrompt,validateTask,VERSION,KEY,ROLES,completedTasks,STATUSES,ASSET_STATUSES,DEFAULT_DOCS,uid,text,clone,role,normalizeProject,normalizeState,starter,slug,safeFilename,parseRepo,safePath,sharedPayload,applyShared,markdown,context,unresolved,utf8Base64,fromBase64,makeZip};
   root.AtelierCore=api;
   if(typeof module!=='undefined'&&module.exports)module.exports=api;
 })(typeof window!=='undefined'?window:globalThis);

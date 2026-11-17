@@ -1,4 +1,4 @@
-# Mon Atelier IA · V2.3
+# Mon Atelier IA · V3.0 — phase 1 (branche de travail)
 
 Un atelier personnel pour organiser les projets menés avec ChatGPT et Claude : dix postes de travail, un dossier commun et un suivi clair des tâches, décisions, fichiers et versions.
 
@@ -22,7 +22,7 @@ Le stockage des pages ouvertes directement depuis un fichier dépend du navigate
 
 Le **Pilotage** présente le travail à faire, les résultats à vérifier, les blocages et les décisions importantes. Les dix **Postes de travail** couvrent pilotage, recherche, usages, design, contenus, médias, programmation, tests, livraison et optimisation.
 
-Une tâche indique son objectif, son poste, son intervenant, les éléments à consulter, son résultat attendu, ses critères de vérification et les résultats observés. Son état suit le parcours **À préparer → Prêt → En cours → À vérifier → Terminé**. Les dépendances et blocages restent visibles.
+Une tâche indique son objectif, son poste, son intervenant, les éléments à consulter, son résultat attendu, ses critères de vérification et les résultats observés. Son état suit le parcours **À préparer → Prêt → En cours → Travail rendu → À vérifier → Validé**. Les dépendances et blocages restent visibles.
 
 Le **Dossier commun** rassemble le contexte, les règles, les documents de référence et les fichiers originaux. Une image est suivie séparément comme **à valider, validée, intégrée, vérifiée en place**. L’application ne réduit pas les fichiers ajoutés.
 
@@ -74,6 +74,27 @@ Chaque poste affiche une IA principale et une IA de contrôle. ChatGPT est propo
 
 Chaque transmission archivée conserve désormais son poste, la tâche associée et l'IA destinataire. Depuis le poste ou les transmissions, « Résultat / évaluation » permet de noter le livrable, le statut (en attente, réussi, partiel, non satisfaisant), une appréciation personnelle de 1 à 5 et les corrections utiles. Les postes affichent un historique et des bilans séparés ChatGPT/Claude, sans classement automatique arbitraire. Les anciennes transmissions restent intactes et apparaissent sans poste attribué si l'ancienne sauvegarde ne le précisait pas. Le bilan est local ; aucune donnée n'est automatiquement envoyée aux IA.
 
-## Livrables terminés et dossier commun (V2.3)
+## Parcours guidé V3 — phase 1
 
-Une tâche passée au statut « Terminé » rejoint automatiquement l'onglet « Livrables terminés » du Dossier commun. Elle y est présentée avec son objectif, son résultat attendu, sa vérification, sa date et ses fichiers associés depuis le catalogue de médias. La tâche reste modifiable dans son poste et dans le tableau des tâches, sans copie en double. L'export DOSSIER_COMMUN.md, l'export ZIP et le JSON partagé GitHub incluent ces livrables. Lors de la reprise d'un dossier partagé GitHub, les tâches terminées inédites sont ajoutées sans écraser celles déjà présentes localement. Un changement local n'effectue pas de commit GitHub implicite : utiliser l'aperçu puis la publication confirmée dans l'onglet GitHub. Les pièces jointes ne sont pas envoyées avec le JSON GitHub ; le ZIP et la sauvegarde locale conservent leurs originaux.
+L’accueil propose **Décrire une idée**, **Reprendre** et **Vérifier**. Le tableau détaillé reste disponible dans un volet replié, et les dix postes et les outils existants restent accessibles par le menu.
+
+1. Décrire une idée : des règles locales par mots-clés proposent un poste et son IA principale. La fiche comprend l’objectif, le livrable attendu et des critères initiaux. Ce n’est pas une analyse par une IA ; relire et ajuster la fiche avec « Relire la fiche tâche ».
+2. La transmission génère un prompt selon le poste et l’IA destinataire. Les documents sont présélectionnés selon leur catégorie et le poste. Chaque document peut être inclus ou exclu. Le cap, les règles et les décisions validées accompagnent la mission ; les niveaux court, standard et complet restent disponibles. Le niveau court exclut les documents. Les choix sont conservés pour le projet, et recalculés au changement de poste ou de tâche.
+3. Copier le prompt et le coller dans ChatGPT ou Claude. Les pièces jointes doivent toujours être ajoutées manuellement. Aucun appel à une API IA payante.
+4. Depuis la tâche, ouvrir **Retour de mission guidé** : résultat reçu, fichiers/liens/commits, vérifications, limites. L’enregistrement place la tâche en **Travail rendu**.
+5. Ouvrir la tâche, contrôler les critères et choisir **À vérifier**, enregistrer, puis choisir **Validé** dans une seconde action. Résultat, critères et preuves sont obligatoires ; les blocages et prérequis non validés empêchent la validation.
+6. Seules les tâches validées en V3 alimentent les livrables de référence du dossier commun, les prompts, le Markdown et le JSON partagé GitHub. Un résultat modifié après validation retourne à **À vérifier**. Une nouvelle saisie dans le retour guidé revient à **Travail rendu**.
+
+Les documents et décisions du dossier restent modifiables comme en V2 ; la barrière de validation porte sur les livrables de tâches. Une évaluation de transmission dans l’historique ne valide pas une tâche.
+
+## Migration V2.3 et sauvegardes
+
+La clé de stockage `atelier-ia-v1` et le stockage des fichiers restent identiques. Le schéma local devient 3. Une copie du JSON avant migration est conservée sous `atelier-ia-before-v3`. Les projets, tâches, prompts, comparaisons, fichiers et champs existants restent conservés. Les anciennes tâches « Terminé » gardent leur état et leur contenu, avec le repère **Ancienne tâche terminée · à revérifier**. Elles sont visibles dans Vérifier et dans le tableau des tâches, mais exclues des références jusqu’à leur validation explicite en V3.
+
+Pour ces tâches anciennes : compléter le résultat reçu et ses vérifications, passer à **À vérifier**, enregistrer, puis valider. Les prérequis anciens doivent aussi être revérifiés. Importer un dossier partagé V2 ne transforme pas ses anciennes tâches terminées en résultats validés V3. Les reprises répétées restent sans doublon et préservent les tâches locales.
+
+Le format partagé reste `mon-atelier-ia-dossier`, version 2, avec des champs additionnels de validation et de résultat ; les sauvegardes complètes conservent le nouvel état. GitHub reste manuel avec aperçu et confirmation. Les originaux binaires restent dans le ZIP et la sauvegarde JSON, pas dans le dossier partagé GitHub.
+
+Avant tout essai sur ses données réelles, exporter une sauvegarde complète depuis V2.3 et la conserver avec l’ancienne application. Le stockage d’un fichier HTML dépend toujours du navigateur et de son chemin : utiliser l’import JSON si les données ne sont pas retrouvées. Le retour vers V2.3 doit se faire avec la sauvegarde V2.3, car elle ne connaît pas le nouvel état « Travail rendu ».
+
+Voir [RAPPORT-V3-PHASE1.md](RAPPORT-V3-PHASE1.md) pour les vérifications et limites.

@@ -4,3 +4,5 @@ tests/zip-verification.zip
 *.log
 .DS_Store
 Thumbs.db
+
+tests/.pnpm-store/
