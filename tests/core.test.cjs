@@ -32,5 +32,5 @@ test('GitHub handles a new file without SHA and a refused token',async()=>{
   let write;const gh=new GitHub(()=> 'token',async(url,opt)=>{if(url.endsWith('/repos/me/project'))return response(200,{default_branch:'main'});if(opt.method==='PUT'){write=JSON.parse(opt.body);return response(201,{content:{sha:'new'}});}return response(404,{});});await gh.publish(await gh.prepare({owner:'me',repo:'project',path:'new.json'},'{}'));assert(!Object.hasOwn(write,'sha'));const denied=new GitHub(()=> 'bad',async()=>response(401,{}));await assert.rejects(()=>denied.request('/user'),/Jeton refusé/);
 });
 test('offline ZIP preserves Unicode filenames and original bytes',async()=>{
-  const zip=await C.makeZip([{name:'références/中国.txt',blob:new Blob(['Été 中文'])},{name:'binary.dat',blob:new Blob([Uint8Array.from([0,255,17,42])])}]);fs.writeFileSync('tests/zip-verification.zip',Buffer.from(await zip.arrayBuffer()));
+  const zip=await C.makeZip([{name:'références/中国.txt',blob:new Blob(['Été 中文'])},{name:'binary.dat',blob:new Blob([Uint8Array.from([0,255,17,42])])}]);fs.writeFileSync(require('node:path').join(__dirname,'zip-verification.zip'),Buffer.from(await zip.arrayBuffer()));
 });
