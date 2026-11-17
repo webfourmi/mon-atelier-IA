@@ -1,6 +1,6 @@
 (function (root) {
   'use strict';
-  const VERSION = '2.2.0';
+  const VERSION = '2.3.0';
   const KEY = 'atelier-ia-v1';
   const uid = () => globalThis.crypto?.randomUUID?.() || 'a-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2);
   const text = v => typeof v === 'string' ? v : (typeof v === 'number' ? String(v) : '');
@@ -41,7 +41,7 @@
     q.documents = Array.isArray(p.documents) ? p.documents.map(d=>({id:text(d.id)||uid(),title:text(d.title)||'Document',kind:text(d.kind)||'note',content:text(d.content),updatedAt:text(d.updatedAt)})) : clone(DEFAULT_DOCS);
     q.workItems = Array.isArray(p.workItems) ? p.workItems.map(t=>{
       if (!t || typeof t!=='object' || !text(t.title).trim()) throw Error('Une tâche n’a pas de titre.');
-      return {...t,id:text(t.id)||uid(),title:text(t.title),role:role(t.role).id,status:STATUSES.some(s=>s.id===t.status)?t.status:'draft',owner:text(t.owner)||'Moi',priority:['high','normal','low'].includes(t.priority)?t.priority:'normal',objective:text(t.objective),inputs:text(t.inputs),deliverable:text(t.deliverable),criteria:text(t.criteria),evidence:text(t.evidence),blocked:text(t.blocked),dependsOn:Array.isArray(t.dependsOn)?t.dependsOn.map(text):[],updatedAt:text(t.updatedAt)};
+      return {...t,id:text(t.id)||uid(),title:text(t.title),role:role(t.role).id,status:STATUSES.some(s=>s.id===t.status)?t.status:'draft',owner:text(t.owner)||'Moi',priority:['high','normal','low'].includes(t.priority)?t.priority:'normal',objective:text(t.objective),inputs:text(t.inputs),deliverable:text(t.deliverable),criteria:text(t.criteria),evidence:text(t.evidence),blocked:text(t.blocked),dependsOn:Array.isArray(t.dependsOn)?t.dependsOn.map(text):[],assetIds:Array.isArray(t.assetIds)?t.assetIds.map(text):[],completedAt:t.status==='done'?(text(t.completedAt)||text(t.updatedAt)):text(t.completedAt),updatedAt:text(t.updatedAt)};
     }) : q.tasks.split(/\n/).filter(s=>s.trim()).map(s=>({id:uid(),title:s.replace(/^[-•]\s*/,''),role:'pilotage',status:'draft',owner:'Moi',priority:'normal',objective:'',inputs:'',deliverable:'',criteria:'',evidence:'',blocked:'',dependsOn:[],updatedAt:''}));
     q.decisionLog = Array.isArray(p.decisionLog)?p.decisionLog.map(d=>({...d,id:text(d.id)||uid(),text:text(d.text),status:['proposed','validated','retired'].includes(d.status)?d.status:'proposed',date:text(d.date),reason:text(d.reason)})):[];
     q.assets = Array.isArray(p.assets)?p.assets.map(a=>({...a,id:text(a.id)||uid(),name:text(a.name)||'Fichier',size:Number(a.size)||0,type:text(a.type),role:role(a.role||'medias').id,status:ASSET_STATUSES.some(s=>s.id===a.status)?a.status:'available',note:text(a.note),date:text(a.date)})):[];
@@ -74,19 +74,34 @@
     return {owner:a[0],repo:a[1]};
   }
   function safePath(value) {const v=text(value).trim();if(!v||v.startsWith('/')||v.includes('\\')||v.split('/').some(x=>!x||x==='.'||x==='..')||/[\x00-\x1f?#]/.test(v))throw Error('Le chemin du fichier GitHub est invalide.');return v;}
+  function completedTasks(p) {
+    return p.workItems.filter(t=>t.status==='done').map(t=>({
+      id:t.id,title:t.title,role:t.role,owner:t.owner,objective:t.objective,
+      deliverable:t.deliverable,criteria:t.criteria,evidence:t.evidence,
+      completedAt:t.completedAt||t.updatedAt||'',
+      files:(t.assetIds||[]).map(id=>p.assets.find(a=>a.id===id)).filter(Boolean).map(a=>({id:a.id,name:a.name,status:a.status,note:a.note}))
+    }));
+  }
   function sharedPayload(p) {
-    return {format:'mon-atelier-ia-dossier',version:2,project:{id:p.id,name:p.name,description:p.description,context:p.context,decisions:p.decisions,legacyTasks:p.tasks,activeVersion:p.activeVersion},documents:clone(p.documents),decisions:clone(p.decisionLog),assets:p.assets.map(a=>({name:a.name,size:a.size,type:a.type,status:a.status,note:a.note})),attachmentNotice:'Les fichiers joints ne sont pas inclus : utiliser le dossier ZIP pour transmettre leurs originaux.'};
+    return {format:'mon-atelier-ia-dossier',version:2,project:{id:p.id,name:p.name,description:p.description,context:p.context,decisions:p.decisions,legacyTasks:p.tasks,activeVersion:p.activeVersion},documents:clone(p.documents),decisions:clone(p.decisionLog),completedTasks:completedTasks(p),assets:p.assets.map(a=>({name:a.name,size:a.size,type:a.type,status:a.status,note:a.note})),attachmentNotice:'Les fichiers joints ne sont pas inclus : utiliser le dossier ZIP pour transmettre leurs originaux.'};
   }
   function applyShared(p, raw) {
     if(!raw||raw.format!=='mon-atelier-ia-dossier'||raw.version!==2||!raw.project||!Array.isArray(raw.documents)||!Array.isArray(raw.decisions))throw Error('Ce fichier n’est pas un dossier commun compatible.');
-    const next=normalizeProject({...p,context:text(raw.project.context),decisions:text(raw.project.decisions),documents:raw.documents,decisionLog:raw.decisions});
-    return {...p,context:next.context,decisions:next.decisions,documents:next.documents,decisionLog:next.decisionLog};
+    const existing=new Set(p.workItems.map(t=>t.id));
+    const received=Array.isArray(raw.completedTasks)?raw.completedTasks.filter(t=>t&&typeof t==='object'&&text(t.id)&&text(t.title)&&!existing.has(t.id)).map(t=>({
+      id:t.id,title:t.title,role:t.role,status:'done',owner:t.owner,
+      objective:t.objective,deliverable:t.deliverable,criteria:t.criteria,evidence:t.evidence,
+      completedAt:t.completedAt,updatedAt:t.completedAt,assetIds:[]
+    })):[];
+    const next=normalizeProject({...p,context:text(raw.project.context),decisions:text(raw.project.decisions),documents:raw.documents,decisionLog:raw.decisions,workItems:[...p.workItems,...received]});
+    return {...p,context:next.context,decisions:next.decisions,documents:next.documents,decisionLog:next.decisionLog,workItems:next.workItems};
   }
   function markdown(p) {
     const sections=[`# ${p.name}`,p.description,`## Objectif et contexte\n${p.context||'À préciser.'}`,`## Contraintes et décisions conservées\n${p.decisions||'À préciser.'}`];
     for(const d of p.documents)sections.push(`## ${d.title}\n${d.content||'À compléter.'}`);
     sections.push('## Journal des décisions\n'+(p.decisionLog.map(d=>`- [${d.status}] ${d.text}${d.reason?' — '+d.reason:''}`).join('\n')||'Aucune décision ajoutée.'));
     sections.push('## Travail en cours\n'+(p.workItems.map(t=>`- [${STATUSES.find(s=>s.id===t.status)?.name}] ${t.title} — ${role(t.role).name} / ${t.owner}${t.blocked?' — Blocage : '+t.blocked:''}\n  Résultat attendu : ${t.deliverable||'À préciser.'}\n  Vérification : ${t.criteria||'À préciser.'}${t.evidence?'\n  Résultat observé : '+t.evidence:''}`).join('\n')||'Aucune tâche.'));
+    sections.push('## Livrables terminés\\n'+(completedTasks(p).map(t=>`### ${t.title}\\nPoste : ${role(t.role).name} | Réalisé par : ${t.owner} | Date : ${t.completedAt||'Non renseignée'}\\nObjectif : ${t.objective||'Non renseigné'}\\nLivrable : ${t.deliverable||'Non renseigné'}\\nCritères : ${t.criteria||'Non renseignés'}\\nVérifications : ${t.evidence||'Non renseignées'}\\nFichiers liés : ${t.files.map(f=>f.name).join(', ')||'Aucun'}`).join('\\n\\n')||'Aucun livrable terminé.'));
     sections.push('## Fichiers et médias\n'+(p.assets.map(a=>`- ${a.name} — ${ASSET_STATUSES.find(s=>s.id===a.status)?.name}${a.note?' — '+a.note:''}`).join('\n')||'Aucun fichier.'));
     sections.push(`## Version et dépôt\nVersion : ${p.activeVersion||'Non renseignée'}\nDépôt : ${p.github.owner&&p.github.repo?'https://github.com/'+p.github.owner+'/'+p.github.repo:'Non associé'}`);
     return sections.join('\n\n')+'\n';
@@ -98,7 +113,7 @@
     const task=t?`\n## Tâche confiée\n${t.title}\nObjectif : ${t.objective}\nÉléments à consulter : ${t.inputs}\nRésultat attendu : ${t.deliverable}\nCritères de vérification : ${t.criteria}\nRésultat observé : ${t.evidence}\nBlocage : ${t.blocked||'Aucun déclaré'}\n`:'';
     const docs=p.documents.filter(d=>d.content.trim());
     let extra='';
-    if(level!=='court')extra='\n## Décisions validées\n'+decisions+'\n'+docs.map(d=>`\n## ${d.title}\n${d.content}`).join('\n');
+    if(level!=='court')extra='\n## Décisions validées\n'+decisions+'\n'+docs.map(d=>`\n## ${d.title}\n${d.content}`).join('\n')+'\n## Livrables déjà terminés\n'+completedTasks(p).map(t=>'- '+t.title+' ('+t.owner+') : '+(t.deliverable||'livrable non précisé')).join('\n');
     if(level==='complet')extra+='\n## Suivi de toutes les tâches\n'+p.workItems.map(t=>`${t.title} | ${role(t.role).name} | ${t.status} | ${t.blocked||''}`).join('\n')+'\n\n## Catalogue des fichiers\n'+p.assets.map(a=>`${a.name} (${a.status}) : ${a.note}`).join('\n');
     const limit=level==='court'?2000:level==='standard'?10000:50000;
     let body=head+extra;
@@ -118,7 +133,7 @@
     }
     const size=central.reduce((n,c)=>n+c.length,0),end=new Uint8Array(22),v=new DataView(end.buffer);v.setUint32(0,0x06054b50,true);v.setUint16(8,files.length,true);v.setUint16(10,files.length,true);v.setUint32(12,size,true);v.setUint32(16,offset,true);return new Blob([...chunks,...central,end],{type:'application/zip'});
   }
-  const api={VERSION,KEY,ROLES,STATUSES,ASSET_STATUSES,DEFAULT_DOCS,uid,text,clone,role,normalizeProject,normalizeState,starter,slug,safeFilename,parseRepo,safePath,sharedPayload,applyShared,markdown,context,unresolved,utf8Base64,fromBase64,makeZip};
+  const api={VERSION,KEY,ROLES,completedTasks,STATUSES,ASSET_STATUSES,DEFAULT_DOCS,uid,text,clone,role,normalizeProject,normalizeState,starter,slug,safeFilename,parseRepo,safePath,sharedPayload,applyShared,markdown,context,unresolved,utf8Base64,fromBase64,makeZip};
   root.AtelierCore=api;
   if(typeof module!=='undefined'&&module.exports)module.exports=api;
 })(typeof window!=='undefined'?window:globalThis);
