@@ -34,3 +34,27 @@ test('GitHub handles a new file without SHA and a refused token',async()=>{
 test('offline ZIP preserves Unicode filenames and original bytes',async()=>{
   const zip=await C.makeZip([{name:'références/中国.txt',blob:new Blob(['Été 中文'])},{name:'binary.dat',blob:new Blob([Uint8Array.from([0,255,17,42])])}]);fs.writeFileSync(require('node:path').join(__dirname,'zip-verification.zip'),Buffer.from(await zip.arrayBuffer()));
 });
+
+
+test('V3 validated references survive sharing, exclude legacy/returned/review and preserve result',()=>{
+  const p=C.normalizeProject({name:'V3',workItems:[
+    {id:'old',title:'Ancienne',status:'done',deliverable:'NE PAS UTILISER'},
+    {...C.proposeTask('Corriger le code'),id:'valid',status:'done',result:'RÉSULTAT VALIDÉ',resultFiles:'commit abc',resultLimits:'Téléphone non testé',evidence:'Tests exécutés'},
+    {...C.proposeTask('Écrire un cours'),id:'review',status:'review',result:'NON VALIDÉ'}
+  ]});
+  assert.equal(C.completedTasks(p).length,1);const raw=C.sharedPayload(p);
+  assert.equal(raw.completedTasks[0].result,'RÉSULTAT VALIDÉ');assert.equal(raw.completedTasks[0].resultFiles,'commit abc');
+  const target=C.normalizeProject({name:'Autre'});const once=C.applyShared(target,raw);const twice=C.applyShared(once,raw);
+  assert.equal(twice.workItems.length,1);assert.equal(C.completedTasks(twice)[0].resultLimits,'Téléphone non testé');
+  const prompt=C.missionPrompt(p,'standard','programmation','','',[],'Claude');assert(prompt.includes('RÉSULTAT VALIDÉ'));assert(!prompt.includes('NE PAS UTILISER'));assert(!prompt.includes('NON VALIDÉ'));
+  assert(C.markdown(p).includes('Résultat validé : RÉSULTAT VALIDÉ'));
+});
+
+test('V3 context selection, task proposal and normalization are deterministic and idempotent',()=>{
+  assert.throws(()=>C.proposeTask('   '));const t=C.proposeTask('Créer une illustration');assert.equal(t.role,'medias');
+  const override=C.proposeTask('Créer une illustration','tests','Claude');assert.equal(override.role,'tests');assert.equal(override.owner,'Claude');
+  const p=C.starter().projects[0];p.documents.find(d=>d.id==='design').content='CHARTE SÉLECTIONNABLE';p.documents.find(d=>d.id==='technical').content='TECHNIQUE SÉLECTIONNABLE';
+  let prompt=C.missionPrompt(p,'standard','medias','','',undefined,'ChatGPT');assert(prompt.includes('CHARTE SÉLECTIONNABLE'));assert(!prompt.includes('TECHNIQUE SÉLECTIONNABLE'));
+  prompt=C.missionPrompt(p,'standard','medias','','',['technical'],'Claude');assert(!prompt.includes('CHARTE SÉLECTIONNABLE'));assert(prompt.includes('TECHNIQUE SÉLECTIONNABLE'));
+  const s=C.normalizeState(C.starter());assert.deepEqual(C.normalizeState(s),s);
+});
