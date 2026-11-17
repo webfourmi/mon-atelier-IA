@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <meta name="referrer" content="no-referrer">
+  <title>Mon Atelier IA — projets & équipe</title>
+  <link rel="stylesheet" href="styles.css">
+  <script src="core.js" defer></script>
+  <script src="github.js" defer></script>
+  <script src="app.js" defer></script>
+</head>
+<body>
+  <a href="#main" class="skip-link">Aller au contenu</a>
+  <aside class="sidebar">
+    <a class="brand" href="#pilotage" aria-label="Mon Atelier IA, pilotage"><span class="brand-mark" aria-hidden="true">a</span><span>Mon Atelier IA<small>Un projet, une équipe, un cap.</small></span></a>
+    <div class="project-switch"><label for="projectSelect">PROJET ACTIF</label><select id="projectSelect"></select><button class="text-button" data-action="new-project">＋ Nouveau projet</button></div>
+    <nav id="nav" aria-label="Espaces de travail"></nav>
+    <div class="sidebar-bottom"><span class="local-dot"></span> Atelier personnel · V2.0<small>ChatGPT & Claude · sans API IA payante</small></div>
+  </aside>
+  <div class="workspace">
+    <header class="topbar"><div class="breadcrumbs"><span id="projectName"></span><span aria-hidden="true">/</span><strong id="sectionName"></strong></div><div class="topbar-right"><span id="saveStatus" role="status">Chargement…</span><button class="button small" data-action="export-all">Sauvegarder</button></div></header>
+    <div id="notice" role="alert" hidden></div>
+    <main id="main" tabindex="-1"></main>
+    <footer>Ton dossier commun accompagne chaque poste. Les décisions restent visibles, les versions restent identifiées.</footer>
+  </div>
+  <div id="toast" role="status" aria-live="polite" hidden></div>
+  <dialog id="editor"><form id="editorForm"><div class="dialog-heading"><h2 id="editorTitle"></h2><button type="button" class="icon-button" data-action="close-dialog" aria-label="Fermer">×</button></div><div id="editorBody"></div><div class="dialog-actions"><button type="button" class="button" data-action="close-dialog">Annuler</button><button class="button primary" type="submit">Enregistrer</button></div></form></dialog>
+  <input id="importFile" type="file" accept=".json,application/json" hidden>
+  <input id="assetFiles" type="file" multiple hidden>
+</body>
+</html>

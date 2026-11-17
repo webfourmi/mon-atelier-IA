@@ -1,0 +1,83 @@
+{
+  "format": "atelier-project",
+  "version": 2,
+  "appVersion": "2.0.0",
+  "exportedAt": "2026-11-17T07:45:13.067Z",
+  "data": {
+    "schemaVersion": 2,
+    "projects": [
+      {
+        "id": "mon-atelier-ia",
+        "name": "Mon Atelier IA",
+        "description": "Organiser les projets avec dix postes, un dossier commun et GitHub.",
+        "context": "Organiser la création et l’optimisation des projets menés avec ChatGPT et Claude. Faire circuler les objectifs, décisions et fichiers entre les postes. Conserver les données de la V1 et le fonctionnement sans API IA payante.",
+        "decisions": "Dix postes et un pilotage commun validés par Webfourmi. Dossier commun et connexion GitHub demandés. Dépôt créé : webfourmi/mon-atelier-IA.",
+        "activeVersion": "2.0.0",
+        "documents": [
+          {
+            "id": "brief",
+            "title": "Cap & objectifs",
+            "kind": "brief",
+            "content": "# Mon Atelier IA : cap du projet\n\nOrganiser la création et l’amélioration des applications et contenus menées avec plusieurs IA, en gardant une référence commune et des transmissions lisibles.\n\nLe besoin validé le 17 novembre 2026 : dix postes de travail, un dossier commun par projet et une connexion GitHub. Préserver les données de la V1 et le fonctionnement sans API IA payante.\n\nLe pilotage doit répondre à trois questions : où en est le projet, qu’est-ce qui bloque, quelle action permet d’avancer ? Les postes mobilisent les compétences de pilotage, recherche, conception des usages, design, contenus, illustrations, programmation, tests, livraison et optimisation.\n\nChaque tâche produit un résultat concret. Une proposition, une décision validée, un fichier terminé, un fichier intégré et un résultat vérifié sont suivis séparément.\n\nLe dossier commun rassemble l’objectif, les contraintes, les décisions, les repères graphiques et techniques, les sources et les fichiers. Les contextes de transmission s’appuient dessus et rappellent la mission du poste.\n\nL’accès GitHub permet de lire le dépôt et ses issues et de partager explicitement le dossier commun. Les échanges avec les IA et l’ajout des pièces jointes dans leurs conversations restent manuels.\n",
+            "updatedAt": "2026-11-17T08:00:00+01:00"
+          },
+          {
+            "id": "rules",
+            "title": "Décisions & contraintes",
+            "kind": "rules",
+            "content": "# Décisions et validations\n\n| Date | État | Décision | Origine |\n| --- | --- | --- | --- |\n| 17/11/2026 | Validée | Organiser les projets autour des dix postes proposés et d’un tableau de pilotage. | Demande de Webfourmi dans cette conversation. |\n| 17/11/2026 | Validée | Prévoir un dossier commun à tous les postes du projet. | Demande explicite de Webfourmi. |\n| 17/11/2026 | Validée | Ajouter une connexion GitHub. | Demande explicite de Webfourmi. |\n| 17/11/2026 | Validée | Utiliser le dépôt `webfourmi/mon-atelier-IA` créé par Webfourmi. | Dépôt annoncé puis vérifié. |\n| 17/11/2026 | Contrainte conservée | Préserver les données de la V1 et le fonctionnement sans API IA payante. | Objectif du projet existant. |\n| 17/11/2026 | Choix de réalisation | Garder le jeton GitHub uniquement en mémoire ; vérifier la destination et le fichier distant avant un envoi. | Réalisation technique de cette version. |\n| 17/11/2026 | Choix de réalisation | Conserver les pièces jointes originales localement ; les inclure dans les exports complets. | Réalisation technique de cette version. |\n\nLes tests de logique et les parcours simulés ne valent pas validation de l’affichage sur le PC de Webfourmi. Cette vérification reste ouverte.\n",
+            "updatedAt": "2026-11-17T08:00:00+01:00"
+          },
+          {
+            "id": "technical",
+            "title": "Repères techniques",
+            "kind": "technical",
+            "content": "# Repères techniques\n\nApplication statique en HTML, CSS et JavaScript, utilisable en ouvrant `index.html`. Aucune dépendance d’exécution, aucun serveur nécessaire au fonctionnement personnel.\n\n| Fichier | Responsabilité |\n| --- | --- |\n| `index.html` | Structure, navigation et boîtes de dialogue. |\n| `styles.css` | Interface et adaptation aux tailles d’écran. |\n| `core.js` | Modèle, migration, postes, contextes, Markdown et création de ZIP. |\n| `github.js` | Client REST GitHub, erreurs, aperçu et contrôle des conflits. |\n| `app.js` | Écrans, événements, stockage, fichiers, imports et exports. |\n| `.atelier-ia/dossier-commun.json` | Dossier commun de Mon Atelier IA, lisible depuis l’écran GitHub. |\n\nLa clé de stockage `atelier-ia-v1` est conservée pour retrouver les données existantes. Le modèle passe au schéma 2 ; une copie avant migration est gardée si le stockage le permet. Les anciens champs `context`, `decisions` et `tasks` restent présents. Les tâches structurées sont dans `workItems`.\n\nLes projets contiennent leurs documents, médias, décisions, transmissions et paramètres de dépôt. Les prompts et archives de comparaison de la V1 sont conservés. Les octets des pièces jointes sont dans IndexedDB ; les sauvegardes JSON complètes les transportent en Base64. Les copies automatiques conservent les états précédents des textes et références.\n\nLes originaux retirés du dossier courant restent disponibles pour la restauration des états précédents dans ce navigateur. Un export ne reprend que les références du ou des projets exportés.\n\nLe jeton GitHub n’est ni dans le modèle ni dans les exports. Les requêtes vont à `https://api.github.com`. L’envoi du dossier cible un fichier précis et utilise le SHA attendu ; il s’arrête en cas de modification distante. Les branches, dépôts ou projets modifiés pendant une lecture sont détectés avant d’en exploiter le résultat.\n\nLes fichiers binaires ne sont pas envoyés avec le JSON commun GitHub. Le dossier ZIP ou local transporte leurs originaux. Le choix d’un dossier réel dépend des capacités et permissions du navigateur ; l’export ZIP reste disponible sans cette fonction.\n",
+            "updatedAt": "2026-11-17T08:00:00+01:00"
+          },
+          {
+            "id": "suivi",
+            "title": "Suivi & prochain passage",
+            "kind": "suivi",
+            "content": "# Suivi de la V2.0\n\n## Réalisé et vérifié automatiquement\n\nLes dix postes, le pilotage, les tâches, le dossier commun, les médias, les décisions, les transmissions et le comparateur sont intégrés. La migration des sauvegardes V1 et les exports avec fichiers originaux ont été testés. Les lectures GitHub publiques ont été essayées sur un dépôt réel ; les envois et conflits sont couverts par des simulations.\n\nRésultat : 25 tests automatisés réussis. Le détail et les limites sont dans `VERIFICATIONS.md`.\n\n## Prochain passage au poste Tests\n\nOuvrir `index.html` sur le PC, importer la sauvegarde V1 et contrôler le rendu, les menus, un fichier joint et une exportation. Vérifier le dossier local dans le navigateur choisi si cette option est utilisée.\n\n## Prochain passage au poste Livraison\n\nDans l’application, associer le dépôt souhaité. Pour les opérations qui en ont besoin, connecter un jeton GitHub limité à ce dépôt. Préparer un aperçu avant le premier envoi de dossier.\n\nLe code livré et les données personnelles du navigateur sont distincts. Les mises à jour du code ne transfèrent pas automatiquement les données entre les ordinateurs ou les services d’IA.\n",
+            "updatedAt": "2026-11-17T08:00:00+01:00"
+          }
+        ],
+        "github": {
+          "owner": "webfourmi",
+          "repo": "mon-atelier-IA",
+          "branch": "main",
+          "path": ".atelier-ia/dossier-commun.json",
+          "lastSync": "",
+          "lastSha": ""
+        },
+        "workItems": [
+          {
+            "id": "controle-pc-v2",
+            "title": "Vérifier l’affichage et la migration sur le PC",
+            "role": "tests",
+            "status": "ready",
+            "owner": "Moi",
+            "priority": "high",
+            "objective": "Compléter les tests automatisés par une vérification réelle sur le poste utilisé.",
+            "inputs": "README.md, VERIFICATIONS.md et sauvegarde JSON de la V1.",
+            "deliverable": "Retour de test avec le navigateur, les résultats et les anomalies éventuelles.",
+            "criteria": "Les projets de la V1 sont retrouvés ; les dix postes s’ouvrent ; un fichier original se télécharge ; un export JSON complet est conservé.",
+            "evidence": "25 tests automatisés réussis. Lecture GitHub publique réelle confirmée. Affichage et permissions sur le PC non testés.",
+            "blocked": "",
+            "dependsOn": [],
+            "updatedAt": ""
+          }
+        ],
+        "tasks": "",
+        "decisionLog": [],
+        "assets": [],
+        "handoffs": []
+      }
+    ],
+    "prompts": [],
+    "comparisons": []
+  },
+  "attachments": [],
+  "missingFiles": []
+}
