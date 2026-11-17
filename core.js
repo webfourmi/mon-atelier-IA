@@ -1,6 +1,6 @@
 (function (root) {
   'use strict';
-  const VERSION = '3.2.1';
+  const VERSION = '3.3.0';
   const KEY = 'atelier-ia-v1';
   const uid = () => globalThis.crypto?.randomUUID?.() || 'a-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2);
   const text = v => typeof v === 'string' ? v : (typeof v === 'number' ? String(v) : '');
@@ -38,7 +38,7 @@
   function normalizeProject(p) {
     if (!p || typeof p !== 'object' || Array.isArray(p) || !text(p.name).trim()) throw Error('Un projet doit avoir un nom.');
     const q = {...p,id:text(p.id)||uid(),name:text(p.name),description:text(p.description),context:text(p.context),decisions:text(p.decisions),tasks:text(p.tasks)};
-    q.documents = Array.isArray(p.documents) ? p.documents.map(d=>({id:text(d.id)||uid(),title:text(d.title)||'Document',kind:text(d.kind)||'note',content:text(d.content),updatedAt:text(d.updatedAt)})) : clone(DEFAULT_DOCS);
+    q.documents = Array.isArray(p.documents) ? p.documents.map(d=>({id:text(d.id)||uid(),title:text(d.title)||'Document',kind:text(d.kind)||'note',content:text(d.content),updatedAt:text(d.updatedAt)})) : clone(DEFAULT_DOCS).map(d=>({...d,updatedAt:''}));
     q.workItems = Array.isArray(p.workItems) ? p.workItems.map(t=>{
       if (!t || typeof t!=='object' || !text(t.title).trim()) throw Error('Une tâche n’a pas de titre.');
       return {...t,validationVersion:t.validationVersion===3?3:0,legacyCompleted:t.legacyCompleted===true||(t.status==='done'&&t.validationVersion!==3),id:text(t.id)||uid(),title:text(t.title),role:role(t.role).id,status:STATUSES.some(s=>s.id===t.status)?t.status:'draft',owner:text(t.owner)||'Moi',priority:['high','normal','low'].includes(t.priority)?t.priority:'normal',objective:text(t.objective),inputs:text(t.inputs),deliverable:text(t.deliverable),criteria:text(t.criteria),evidence:text(t.evidence),blocked:text(t.blocked),dependsOn:Array.isArray(t.dependsOn)?t.dependsOn.map(text):[],assetIds:Array.isArray(t.assetIds)?t.assetIds.map(text):[],completedAt:t.status==='done'?(text(t.completedAt)||text(t.updatedAt)):text(t.completedAt),updatedAt:text(t.updatedAt)};
@@ -48,6 +48,9 @@
     q.handoffs = Array.isArray(p.handoffs)?p.handoffs.map(h=>({...h,id:text(h.id)||uid(),content:text(h.content),title:text(h.title),from:text(h.from),to:text(h.to),date:text(h.date),role:ROLES.some(r=>r.id===h.role)?h.role:'',taskId:text(h.taskId),result:text(h.result),notes:text(h.notes),rating:[1,2,3,4,5].includes(Number(h.rating))?Number(h.rating):0,outcome:['pending','done','partial','failed'].includes(h.outcome)?h.outcome:'pending',evaluatedAt:text(h.evaluatedAt)})):[];
     q.github = {owner:text(p.github?.owner),repo:text(p.github?.repo),branch:text(p.github?.branch),path:text(p.github?.path)||'.atelier-ia/dossier-commun.json',lastSync:text(p.github?.lastSync),lastSha:text(p.github?.lastSha)};
     for (const k of ['owner','repo','branch','path']) q.github[k]=text(q.github[k]);
+    q.projectType=['general','educational','game','articles','professional'].includes(p.projectType)?p.projectType:'general';
+    if(p.memory&&typeof p.memory==='object')q.memory={...p.memory,specification:typeof p.memory.specification==='string'?p.memory.specification:q.context,features:(Array.isArray(p.memory.features)?p.memory.features:[]).filter(f=>f&&typeof f==='object').map(f=>({...f,id:text(f.id)||uid(),title:text(f.title),description:text(f.description),areas:text(f.areas),checks:text(f.checks)})),issues:(Array.isArray(p.memory.issues)?p.memory.issues:[]).filter(x=>x&&typeof x==='object').map(x=>({...x,id:text(x.id)||uid(),title:text(x.title),detail:text(x.detail),open:x.open!==false}))};
+    if(Array.isArray(p.releases))q.releases=p.releases.filter(r=>r&&typeof r==='object').map(r=>({...r,id:text(r.id)||uid(),version:text(r.version)}));
     q.activeVersion=text(p.activeVersion);
     return q;
   }
@@ -196,7 +199,7 @@
   }
   const RELEASE_CHECKS=[['backup','Sauvegarde complète conservée'],['scope','Version et fichiers à livrer identifiés'],['tests','Tests de la version exécutés et preuves relues'],['rollback','Procédure de retour arrière préparée']];
   function releaseSignature(p) {
-    return String(crc32(new TextEncoder().encode(JSON.stringify(p.workItems.map(t=>({id:t.id,title:t.title,status:t.status,validationVersion:t.validationVersion,role:t.role,result:text(t.result),evidence:text(t.evidence),criteria:text(t.criteria),blocked:text(t.blocked),dependsOn:t.dependsOn||[],resultFiles:text(t.resultFiles),resultLimits:text(t.resultLimits),workBranch:text(t.workBranch),pullRequest:text(t.pullRequest)}))))));
+    return String(crc32(new TextEncoder().encode(JSON.stringify(p.workItems.map(t=>({id:t.id,title:t.title,status:t.status,validationVersion:t.validationVersion,role:t.role,result:text(t.result),evidence:text(t.evidence),criteria:text(t.criteria),blocked:text(t.blocked),dependsOn:t.dependsOn||[],resultFiles:text(t.resultFiles),resultLimits:text(t.resultLimits),workBranch:text(t.workBranch),pullRequest:text(t.pullRequest),regressionChecks:t.regressionChecks||[],regressionSignature:text(t.regressionSignature),affectedFeatureIds:t.affectedFeatureIds||[]}))))));
   }
   function githubHealth(o) {
     const checks=o?.checks?.check_runs||[],statuses=o?.status?.statuses||[];

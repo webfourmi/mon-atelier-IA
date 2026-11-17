@@ -1,10 +1,10 @@
-# Mon Atelier IA · V3.2 — confort et optimisation
+# Mon Atelier IA · V3.3 — mémoire et vérifications
 
 Un atelier personnel pour organiser les projets menés avec ChatGPT et Claude : dix postes de travail, un dossier commun et un suivi clair des tâches, décisions, fichiers et versions.
 
 ## Démarrer sur ordinateur
 
-Télécharger les fichiers du dépôt, décompresser le dossier, puis ouvrir **index.html** dans Chrome, Edge ou Firefox. Garder `styles.css`, `core.js`, `github.js` et `app.js` à côté de `index.html`.
+Télécharger les fichiers du dépôt, décompresser le dossier, puis ouvrir **index.html** dans Chrome, Edge ou Firefox. Garder `styles.css`, `core.js`, `planning.js`, `github.js` et `app.js` à côté de `index.html`.
 
 Aucune installation ni API IA payante n’est nécessaire pour utiliser l’application. GitHub nécessite une connexion Internet. Les échanges avec les IA se font par copie du contexte et ajout manuel des pièces jointes.
 
@@ -158,3 +158,42 @@ Les préférences et évaluations restent locales, sauvegardées dans le JSON co
 La transmission affiche et copie par défaut uniquement la consigne du poste, le titre, l’objectif, les éléments utiles, le résultat attendu et les critères de la tâche sélectionnée, avec ses éventuels repères de branche/demande de fusion et la demande complémentaire saisie. Le contexte général, les documents, décisions, autres tâches et anciens résultats ne sont plus ajoutés automatiquement. La copie et l’archive utilisent le même texte.
 
 L’ajout du dossier commun reste possible en ouvrant **Ajouter du contexte du projet (facultatif)** puis en cochant explicitement l’option. Ce choix est conservé dans le brouillon courant, mais revient à désactivé lorsqu’une nouvelle tâche est sélectionnée ou préparée. Le mode débutant/avancé et l’ancien niveau de contexte ne l’activent pas automatiquement.
+
+
+## V3.3 — mémoire structurée, régressions et réponses importées
+
+### A. Mémoire du projet
+
+Le nouvel espace distingue **Cahier des charges**, **Décisions validées**, **Fonctionnalités existantes**, **Problèmes connus** et **Travaux à venir**. Le cahier initial reprend le contexte existant sans supprimer les anciens documents. Les décisions validées et les tâches sont reliées à leurs registres existants : aucune copie de tâche n’est créée. Ajouter une fonction confirme qu’elle existe déjà ; préciser ses zones/mots-clés et les contrôles permettant de la préserver. Les problèmes peuvent être résolus, bloquants ou simplement à surveiller.
+
+La mémoire accompagne les sauvegardes et le dossier partagé GitHub. Lors d’une reprise, les entrées locales déjà connues ne sont pas écrasées par une entrée distante portant le même identifiant. Les versions et leurs instantanés restent dans les sauvegardes complètes, pas dans le partage du seul dossier commun.
+
+### B. Contrôles de régression
+
+Dans une tâche, ouvrir **Fonctions liées et contrôles de régression**. La liste est préparée à partir du type de projet, des mots-clés et des fonctions explicitement sélectionnées. Pour une application pédagogique, elle couvre recherche, sauvegarde/progression, révisions et navigation entre cours/épisodes. Chaque contrôle conserve un état et une observation.
+
+Changer le résultat, les zones concernées ou les fonctions du registre remet les preuves de régression à refaire. Le contrôle prépare des vérifications : il ne lance pas les tests de l’application et ne peut pas garantir l’absence de régression. Le prompt reste limité à la tâche ; seules les fonctions explicitement liées et le repère du modèle peuvent s’y ajouter, pas la mémoire entière.
+
+### C. Importer le résultat
+
+Le bouton est disponible dans une tâche et dans sa transmission. Coller la réponse ou choisir/déposer un fichier **.txt, .md ou .json de moins de 2 Mo**, puis **Prévisualiser avant enregistrement**. Les rubriques Livrable/Résultat, Fichiers, Tests/Vérifications, Limites et Prochaines étapes sont reconnues localement. Le JSON peut utiliser `result`, `files`, `tests`, `limits`, `nextTasks` (ou `livrables`, `fichiers`, `verifications`, `limites`, `tachesSuivantes`). Sans rubrique de résultat exploitable, le texte entier est conservé comme résultat à relire.
+
+L’aperçu est modifiable. Une case de confirmation est obligatoire ; seules les tâches suivantes cochées sont créées, avec une dépendance vers la tâche source et dédoublonnage des mêmes propositions. La réponse source reste conservée quand elle diffère du résultat extrait. L’import place la tâche en **Travail rendu** et ne valide ni la tâche ni les tests déclarés par l’IA. Aucun PDF ou fichier Word n’est analysé.
+
+### D. Modèles de projet
+
+Choisir le type depuis **Modifier le projet** ou la mémoire : application pédagogique, jeu, site d’articles, outil professionnel ou projet général. Le modèle propose des postes, des critères et des contrôles adaptés. Les nouveaux prompts comportent un repère spécifique au type de projet. Les dix postes restent utilisables et les tâches existantes ne sont pas réécrites.
+
+### E. Historique des versions
+
+**Historique des versions → Consigner une version publiée** enregistre les nouveautés, fichiers, tests, problèmes, date et lien GitHub d’une publication déjà réalisée, avec confirmation. Un état des textes et références est conservé ; les versions précédentes ne sont pas écrasées. Sélectionner une version permet de voir les changements consignés depuis cette référence jusqu’à la dernière version enregistrée.
+
+Le lien GitHub permet de retrouver le commit/tag/version. Le téléchargement de l’état n’inclut pas les originaux binaires et n’effectue aucun retour arrière. Les anciennes versions ne sont pas reconstituées automatiquement depuis GitHub ; les dates et nouveautés doivent être consignées à partir d’informations réelles.
+
+### F. Cohérence avant publication
+
+**Préparer la livraison** signale tâches/prérequis non validés, contrôles sans réussite documentée, problèmes connus et intégrations GitHub non confirmées. **Actualiser fichiers et intégration GitHub** vérifie les originaux dans le stockage local et consulte les demandes de fusion liées aux tâches (30 maximum). Une fusion doit être effective vers la branche par défaut du dépôt associé et toujours correspondre aux repères de la tâche. Une branche sans demande de fusion reste non confirmée.
+
+Le contrôle des originaux doit être renouvelé après réouverture de l’atelier ou changement des fichiers. Un lien GitHub ou un résultat modifié rend la confirmation d’intégration périmée. L’indicateur de préparation tient compte des oublis bloquants ; les problèmes « à surveiller » restent visibles sans être bloquants. Les confirmations personnelles de préparation doivent être renouvelées après modification des preuves de régression.
+
+Ce tableau ne remplace pas les tests et ne prouve pas que le contenu d’un commit correspond à un résultat décrit. Il ne fusionne et ne publie rien. Les fonctions GitHub et les sauvegardes précédentes sont préservées. Voir [RAPPORT-V3.3.md](RAPPORT-V3.3.md).
