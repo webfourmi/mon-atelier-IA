@@ -236,4 +236,6 @@ Dans **Tâches**, choisir **Importer un audit PDF**, puis sélectionner le docum
 
 Relire le classement, ajuster le nom, le problème ou la solution et ajouter une proposition si nécessaire. **Créer les tâches** enregistre la sélection dans **À préparer**. Le nom du PDF et la page accompagnent la tâche. Un nouvel import signale les entrées déjà présentes dans ce projet. La solution reste une proposition jusqu’à la validation manuelle de la tâche.
 
+Dans un tableau, l’atelier utilise les bordures et l’alignement du texte pour séparer les constats et conserver les phrases écrites sur plusieurs lignes. Deux propositions peuvent porter le même titre. Le message **Même titre · compare les constats** permet de relire leurs références, leurs problèmes et leurs solutions. Elles restent sélectionnables. L’atelier reconnaît également la ligne d’origine lors d’un nouvel import du même fichier, même après un changement de nom dans la fiche.
+
 La lecture et le classement se font sur l’appareil. Pour un scan sans texte sélectionnable, l’aperçu permet de coller le texte obtenu par reconnaissance de caractères. Le bouton **Voir le texte lu** permet de comparer les propositions avec les passages extraits.

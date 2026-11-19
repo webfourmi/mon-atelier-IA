@@ -3,6 +3,9 @@
   const A=window.AtelierAudit;
   const scriptBase=new URL('.',document.currentScript.src);
   const $=selector=>document.querySelector(selector);
+  const reviewMessages={
+    existing:'Déjà dans les tâches', repeated:'Même constat dans la sélection', namesake:'Même titre · compare les constats'
+  };
   let readerPromise;
   function script(path) {
     return new Promise((resolve,reject)=>{
@@ -46,10 +49,19 @@
           const text=await page.getTextContent();
           const lines=A.pageLines(text.items,viewport);
           if (!lines.length) unreadable.push(number);
-          pages.push({number,height:viewport.height,lines});
+          let rules=[];
+          if (lines.some(line=>line.cells.length>1)) {
+            try {
+              rules=A.horizontalRules(await page.getOperatorList(),viewport,pdf);
+            } catch {
+              // Text remains usable when the optional drawing data cannot be decoded.
+              signal.throwIfAborted();
+            }
+          }
+          pages.push({number,height:viewport.height,lines,rules});
         } finally { page.cleanup(); }
       }
-      return {pages,unreadable,id:doc.fingerprints[0],name:file.name};
+      return {pages,unreadable,id:doc.fingerprints[0],revision:doc.fingerprints[1],name:file.name};
     } catch(error) {
       if (signal.aborted) throw error;
       if (error.name==='PasswordException') throw Error('Ce PDF est protégé par un mot de passe. Choisis une copie déverrouillée ou colle son texte.');
@@ -78,20 +90,17 @@
 
     function controls() {
       const dest=destination();
-      const seen=new Set();
+      const reviews=A.reviewSelection(dest,rows,doc.id);
       let selected=0, existing=0;
       rows.forEach((r,i)=>{
         const card=list.children[i], toggle=card.querySelector('[data-field="selected"]');
-        const k=A.key(r.title);
-        const already=dest.workItems.some(t=>A.duplicate(t,r,doc.id));
-        const repeated=!!k && seen.has(k);
-        const blocked=already || repeated;
+        const review=reviews[i], already=review==='existing', blocked=already || review==='repeated';
         toggle.disabled=blocked;
         toggle.checked=r.selected && !blocked;
-        if (toggle.checked) { selected++; if (k) seen.add(k); }
+        if (toggle.checked) selected++;
         if (already) existing++;
         card.classList.toggle('audit-existing',blocked);
-        card.querySelector('[data-duplicate]').textContent=already?'Déjà dans les tâches':repeated?'Même nom dans la sélection':'';
+        card.querySelector('[data-duplicate]').textContent=reviewMessages[review] || '';
         card.querySelector('[data-title]').textContent=r.title || 'Tâche à nommer';
         card.querySelector('[data-classification]').textContent=window.AtelierCore.role(r.role).name+' · Priorité '+A.levels[r.priority].toLocaleLowerCase('fr');
       });
@@ -119,6 +128,7 @@
       const match=A.matchProject(projects,doc.name+' '+start);
       if (match && !projectChosen) project.value=match.id;
       rows=A.parse(doc.pages).map((r,index)=>({...r,page:pasted?null:r.page,selected:true,
+        anchor:doc.revision ? doc.revision+'/'+r.anchor : r.anchor,
         entry:[r.ref,r.page,A.key(r.originalTitle),index].join('|')}));
       list.innerHTML=rows.map(rowCard).join('');
       const unread=doc.unreadable||[];

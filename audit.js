@@ -40,6 +40,8 @@
     if (/^(?:verifier|valider|recouper) (?:les |la |des )?sources/.test(title)) return 'recherche';
     if (/^(?:tests? a |recette|verifications a )/.test(section)) return 'tests';
     const specific = matchRole(title);
+    if (specific==='recherche' && /\brecherche\b/.test(title) && !/\b(?:documentaire|bibliograph\w*|sources?)\b/.test(title) &&
+        /\b(?:lente?s?|lenteurs?|ralentissements?|latence|temps de reponse)\b/.test(title)) return 'optimisation';
     if (specific) return specific;
     const bySection = matchRole(section);
     if (bySection) return bySection;
@@ -79,6 +81,60 @@
       }
       return {y:row.y, size:row.size, cells, text:cells.map(cell => cell.text).join(' ')};
     });
+  }
+
+  // Read the straight edges painted by the bundled PDF.js 5.x, in the same
+  // viewport coordinates as pageLines. Adjacent cell borders can form one rule.
+  function horizontalRules(list, viewport, pdf) {
+    const {OPS,Util}=pdf, segments=[], stack=[];
+    const strokes=new Set([OPS.stroke,OPS.closeStroke,OPS.fillStroke,OPS.eoFillStroke,OPS.closeFillStroke,OPS.closeEOFillStroke]);
+    const fills=new Set([OPS.fill,OPS.eoFill,OPS.rawFillPath]);
+    let matrix=viewport.transform;
+    function segment(start,end) {
+      if (start && end && Math.abs(start[1]-end[1])<=0.5 && Math.abs(start[0]-end[0])>=8) {
+        segments.push({y:Math.round((start[1]+end[1])*2)/4,left:Math.min(start[0],end[0]),right:Math.max(start[0],end[0])});
+      }
+    }
+    for (const [i,op] of list.fnArray.entries()) {
+      const args=list.argsArray[i];
+      if (op===OPS.save || op===OPS.paintFormXObjectBegin) {
+        stack.push(matrix);
+        if (op===OPS.paintFormXObjectBegin && args[0]) matrix=Util.transform(matrix,args[0]);
+      } else if (op===OPS.restore || op===OPS.paintFormXObjectEnd) {
+        matrix=stack.pop() || viewport.transform;
+      } else if (op===OPS.transform) {
+        matrix=Util.transform(matrix,args);
+      } else if (op===OPS.constructPath && args[2]) {
+        const [paint,[path],bounds]=args;
+        if (fills.has(paint)) {
+          const box=[Infinity,Infinity,-Infinity,-Infinity];
+          Util.axialAlignedBoundingBox(bounds,matrix,box);
+          if (box[3]-box[1]<=1.5) segment([box[0],box[1]],[box[2],box[1]]);
+        } else if (strokes.has(paint) && path) {
+          let start,previous;
+          // Packed commands: move, line, cubic, quadratic, close.
+          for (let j=0;j<path.length;) {
+            const command=path[j++];
+            if (command===4) { segment(previous,start); previous=start; continue; }
+            if (command===2) j+=4;
+            else if (command===3) j+=2;
+            else if (command!==0 && command!==1) break;
+            const point=[path[j++],path[j++]];
+            Util.applyTransform(point,matrix);
+            if (command===0) start=point;
+            if (command===1) segment(previous,point);
+            previous=point;
+          }
+        }
+      }
+    }
+    const rules=[];
+    for (const edge of segments.sort((a,b)=>a.y-b.y || a.left-b.left)) {
+      const previous=rules.at(-1);
+      if (previous && previous.y===edge.y && edge.left<=previous.right+1) previous.right=Math.max(previous.right,edge.right);
+      else rules.push(edge);
+    }
+    return rules;
   }
   const columnNames = {
     ref:/^(ref(?:erence)?|id|code|n[°o]?)$/,
@@ -143,33 +199,73 @@
     if (!title || !/\p{L}/u.test(title)) return null;
     const item = {...raw,title,problem,solution};
     return {title,problem,solution,role:chooseRole(item),priority:priority(raw.priority)||'normal',
-      page:raw.page,section:raw.section||'',ref:clean(raw.ref),detail:clean(raw.detail),originalTitle:title};
+      page:raw.page,anchor:[raw.page,raw.y,raw.part||0].join(':'),section:raw.section||'',ref:clean(raw.ref),detail:clean(raw.detail),originalTitle:title};
+  }
+
+  // With no rules or references, two aligned fields can start a new row.
+  // If the next word would not have fitted in the previous cell, keep its wrap.
+  function startsUnruledRow(previous,fields,line,columns,lead) {
+    if (!previous || !fields[lead] || !columns.some(c=>c.name!==lead && ['title','problem','solution','detail'].includes(c.name) && fields[c.name])) return false;
+    const start=fields[lead];
+    if (!/^[\p{Lu}\d]/u.test(start) && !looksAction(fields.solution || start)) return false;
+    const leadIndex=columns.findIndex(c=>c.name===lead), next=columns[leadIndex+1];
+    if (!next) return false;
+    const tolerance=Math.min(8,line.size*0.8);
+    const last=previous.cells.filter(c=>c.x+tolerance>=columns[leadIndex].x && c.x+tolerance<next.x).at(-1);
+    if (!last) return true;
+    const word=start.split(/\s/,1)[0];
+    const cell=line.cells.find(c=>c.x+tolerance>=columns[leadIndex].x && c.x+tolerance<next.x);
+    const charWidth=cell?.end>cell?.x ? (cell.end-cell.x)/cell.text.length : line.size*0.5;
+    return next.x-last.end > word.length*charWidth+line.size*1.25;
   }
 
   function readTables(pages) {
     const items = [], prose = [];
-    let columns, row, section = '', prevY, prevPage;
+    let columns, row, previous, section = '';
     function finishRow() { if (row && !skipHeading.test(fold(row.section))) items.push(row); row=null; }
+    function readBlock(lines,page) {
+      if (!lines.length) return;
+      const first=lines[0], last=lines.at(-1);
+      const rules=(page.rules || []).filter(edge=>edge.y>first.y && edge.y<last.y &&
+        edge.left<=columns[0].x+2 && edge.right>=columns.at(-1).x+2);
+      const lead=columns.find(c=>['title','problem','solution'].includes(c.name)).name;
+      const hasRef=columns.some(c=>c.name==='ref');
+      let cut=0;
+      for (const line of lines) {
+        const fields=fieldsAt(line,columns);
+        const crossed=cut<rules.length && rules[cut].y<line.y;
+        while (cut<rules.length && rules[cut].y<line.y) cut++;
+        const gap=previous?.page===page.number ? line.y-previous.line.y : 0;
+        const unruled=!hasRef && (!rules.length || previous?.page!==page.number) && (gap>line.size*1.65 ||
+          startsUnruledRow(previous?.line,fields,line,columns,lead));
+        if (!row || crossed || fields.ref || (fields[lead] && (line.delimited || fields.priority || fields.status || unruled))) {
+          finishRow();
+          row={table:true,proposed:columns.some(c=>c.proposed),section,page:page.number,y:line.y};
+        }
+        for (const [k,v] of Object.entries(fields)) row[k]=join(row[k],v);
+        previous={page:page.number,line};
+      }
+    }
     for (const page of pages) {
+      let block=[];
       for (const line of page.lines) {
         const numbered = line.text.match(/^\d+(?:\.\d+)*[.)]\s+(.+)/);
         const header = columnHeaders(line.cells);
-        if (header) { columns=header; continue; }
+        if (header) {
+          readBlock(block,page);
+          if (block.length || (columns && columns.map(c=>c.name).join('|')!==header.map(c=>c.name).join('|'))) {
+            finishRow(); previous=null;
+          }
+          block=[]; columns=header; continue;
+        }
         if (line.cells.length===1 && ((numbered && !looksAction(numbered[1])) ||
             (line.isHeading && (!columns || line.cells[0].x<=columns[0].x+8)))) {
-          finishRow(); columns=null; section=numbered?.[1]||line.text;
+          readBlock(block,page); block=[]; finishRow(); previous=null; columns=null; section=numbered?.[1]||line.text;
         }
         if (!columns) { prose.push({...line,page:page.number}); continue; }
-        const fields = fieldsAt(line,columns);
-        const lead = columns.find(h => ['title','problem','solution'].includes(h.name))?.name;
-        const hasRef = columns.some(h => h.name==='ref');
-        const gap = prevPage===page.number ? line.y-prevY : Infinity;
-        const newRow = !row || !!fields.ref || (fields[lead] && (line.delimited || fields.priority || fields.status ||
-          (!hasRef && gap>line.size*1.65)));
-        if (newRow) { finishRow(); row={table:true,proposed:columns.some(c=>c.proposed),section,page:page.number,size:line.size}; }
-        for (const [k,v] of Object.entries(fields)) row[k]=join(row[k],v);
-        prevY=line.y; prevPage=page.number;
+        block.push(line);
       }
+      readBlock(block,page);
     }
     finishRow();
     return {items,prose};
@@ -190,7 +286,7 @@
       }
       draft=null; activeField='';
     }
-    function begin(page) { return {page,section,priority:groupPriority}; }
+    function begin(line) { return {page:line.page,y:line.y,section,priority:groupPriority}; }
     function setSection(title) {
       finish(); section=title; excluded=skipHeading.test(fold(title));
       groupPriority=priority(title); pending='';
@@ -225,7 +321,7 @@
         if (!field) continue;
         if (!draft || (field==='title' && (draft.title||draft.problem||draft.solution)) ||
             (field==='problem' && draft.problem) || (field==='ref' && draft.ref)) {
-          finish(); draft=begin(line.page);
+          finish(); draft=begin(line);
           if (pending && field!=='title') draft.title=pending;
         }
         pending=''; activeField=field; draft[field]=clean(label[2]); continue;
@@ -233,7 +329,7 @@
       const newParagraph=!draft || line.paragraphBreak || /[.!?]$/.test(draft[activeField]||'');
       if (marked || marker || (newParagraph && (looksAction(content) || (actionHeading.test(fold(section)) && issueWords.test(low))))) {
         finish(); pending=''; if (/^(?:[-•]\s*)?\[x\]|^☑/i.test(text) || completed.test(low)) continue;
-        draft=begin(line.page);
+        draft=begin(line);
         if (marker) draft.priority=marker[1]||marker[2];
         activeField='body'; draft.body=content; continue;
       }
@@ -248,7 +344,7 @@
       // Some reports put several independent checks in one sentence with a shared instruction.
       const list = (item.solution||'').match(/^((?:V[ée]rifier|Tester|Contr[oô]ler)[^:;]{0,65}):\s*(.+;.+)$/i);
       if (!list || item.title || item.problem) return [item];
-      return list[2].split(/\s*;\s*/).filter(Boolean).map(part => ({...item,solution:list[1].trim()+' : '+part}));
+      return list[2].split(/\s*;\s*/).filter(Boolean).map((text,part) => ({...item,part,solution:list[1].trim()+' : '+text}));
     });
   }
 
@@ -275,7 +371,14 @@
       })};
     });
     const {items,prose}=readTables(prepared);
-    return [...items,...readProse(prose)].map(normalise).filter(Boolean).sort((a,b)=>a.page-b.page);
+    const rows=[...items,...readProse(prose)].map(normalise).filter(Boolean).sort((a,b)=>a.page-b.page);
+    const occurrences=new Map();
+    for (const row of rows) {
+      const base=row.anchor, ordinal=occurrences.get(base)||0;
+      occurrences.set(base,ordinal+1);
+      if (ordinal) row.anchor=base+':'+ordinal;
+    }
+    return rows;
   }
   function fromText(text) {
     return text.split('\f').map((part,i) => {
@@ -291,7 +394,7 @@
         if (delimited) {
           cells=value.trim().replace(/^\||\|$/g,'').split(/[|\t]/).map((s,i)=>({x:i*100,text:clean(s)}));
         } else {
-          cells=[...value.matchAll(/\S(?:.*?\S)?(?=\s{2,}|$)/g)].map(m=>({x:m.index*7,text:clean(m[0])}));
+          cells=[...value.matchAll(/\S(?:.*?\S)?(?=\s{2,}|$)/g)].map(m=>({x:m.index*7,end:(m.index+m[0].length)*7,text:clean(m[0])}));
         }
         cells=cells.filter(c=>c.text);
         if (!cells.length) cells=[{x:0,text:clean(value)}];
@@ -305,18 +408,63 @@
   function sourceLabel(source) {
     return [source.name, source.page && 'p. '+source.page, source.ref, source.section].filter(Boolean).join(' · ');
   }
-  function duplicate(existing, item, sourceId) {
-    const sameSource = existing.auditSource?.document === sourceId &&
-      existing.auditSource?.entry === item.entry;
-    return sameSource || (!!key(item.title) && key(existing.title) === key(item.title));
+  function findingIdentity(item,documentId) {
+    const source=item.auditSource;
+    const title=key(item.title);
+    const problem=clean(item.problem ?? item.objective).normalize('NFC').toLowerCase();
+    const solution=clean(item.solution ?? (item.result || item.deliverable)).normalize('NFC').toLowerCase();
+    const ref=fold(source?.ref ?? item.ref);
+    const document=source?.document || documentId;
+    const origin=id=>document && id ? JSON.stringify([document,id]) : '';
+    // A bare title repeated in the solution adds no independent evidence.
+    const content=(problem || (solution && key(solution)!==title)) ? JSON.stringify([problem,solution]) : '';
+    return {title,ref,content,anchor:origin(source?.anchor ?? item.anchor),entry:origin(source?.entry ?? item.entry)};
+  }
+  class FindingIndex {
+    constructor() {
+      this.anchors=new Set();
+      this.legacyEntries=new Set();
+      this.byTitle=new Map();
+    }
+    add(finding) {
+      if (finding.anchor) this.anchors.add(finding.anchor);
+      else if (finding.entry) this.legacyEntries.add(finding.entry);
+      if (!finding.title) return;
+      if (!this.byTitle.has(finding.title)) this.byTitle.set(finding.title,[]);
+      this.byTitle.get(finding.title).push(finding);
+    }
+    includes(finding) {
+      if (this.anchors.has(finding.anchor) || this.legacyEntries.has(finding.entry)) return true;
+      const namesakes=this.byTitle.get(finding.title) || [];
+      return !!finding.content && namesakes.some(other=>other.content===finding.content &&
+        !(finding.ref && other.ref && finding.ref!==other.ref));
+    }
+  }
+  function duplicate(existing,item,sourceId) {
+    const index=new FindingIndex();
+    index.add(findingIdentity(existing));
+    return index.includes(findingIdentity(item,sourceId));
+  }
+  function reviewSelection(project,rows,sourceId) {
+    const saved=new FindingIndex(), selected=new FindingIndex(), names=new Map();
+    for (const task of project.workItems) saved.add(findingIdentity(task));
+    const findings=rows.map(row=>findingIdentity(row,sourceId));
+    for (const {title} of findings) names.set(title,(names.get(title)||0)+1);
+    return findings.map((finding,i)=>{
+      if (saved.includes(finding)) return 'existing';
+      if (selected.includes(finding)) return 'repeated';
+      if (rows[i].selected!==false) selected.add(finding);
+      return finding.title && (saved.byTitle.has(finding.title) || names.get(finding.title)>1) ? 'namesake' : '';
+    });
   }
   function newTasks(project, chosen, document) {
     const tasks=[];
-    for (const item of chosen) {
+    const reviews=reviewSelection(project,chosen,document.id);
+    for (const [i,item] of chosen.entries()) {
+      if (item.selected===false || reviews[i]==='existing' || reviews[i]==='repeated') continue;
       if (!clean(item.title)) throw Error('Donne un nom à chaque tâche sélectionnée.');
-      if ([...project.workItems,...tasks].some(t=>duplicate(t,item,document.id))) continue;
       const t=C.makeTask(project,item.title,item.role);
-      const source={document:document.id,entry:item.entry,name:document.name,page:item.page,ref:item.ref,section:item.section};
+      const source={document:document.id,entry:item.entry,anchor:item.anchor,name:document.name,page:item.page,ref:item.ref,section:item.section};
       tasks.push({...t,title:clean(item.title),objective:clean(item.problem),deliverable:clean(item.solution),
         inputs:[sourceLabel(source),item.detail].filter(Boolean).join('\n\n'),priority:item.priority,status:'draft',validationVersion:0,
         result:'',evidence:'',completedAt:'',auditSource:source});
@@ -329,7 +477,7 @@
     const matches=projects.filter(p=>[p.name,p.github?.repo].some(name=>key(name).length>=3 && haystack.includes(' '+key(name)+' ')));
     return matches.length===1 ? matches[0] : null;
   }
-  const api={levels,pageLines,fromText,parse,key,duplicate,sourceLabel,newTasks,matchProject};
+  const api={levels,pageLines,horizontalRules,fromText,parse,key,duplicate,reviewSelection,sourceLabel,newTasks,matchProject};
   root.AtelierAudit=api;
   if (typeof module!=='undefined' && module.exports) module.exports=api;
 })(globalThis);
