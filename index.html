@@ -11,6 +11,8 @@
   <script src="planning.js" defer></script>
   <script src="workflows.js" defer></script>
   <script src="github.js" defer></script>
+  <script src="audit.js" defer></script>
+  <script src="audit-import.js" defer></script>
   <script src="app.js" defer></script>
 </head>
 <body>
@@ -33,5 +35,41 @@
   <input id="importFile" type="file" accept=".json,application/json" hidden>
   <input id="resultImportFile" type="file" accept=".txt,.md,.json,text/plain,text/markdown,application/json" hidden>
   <input id="assetFiles" type="file" multiple hidden>
+  <dialog id="auditDialog" aria-labelledby="auditHeading">
+    <form id="auditForm">
+      <div class="dialog-heading">
+        <h2 id="auditHeading">Importer un audit PDF</h2>
+        <button type="button" class="icon-button" data-close-audit aria-label="Fermer">×</button>
+      </div>
+      <label for="auditFile">Audit à lire</label>
+      <input id="auditFile" type="file" accept=".pdf,application/pdf">
+      <p class="help">Le PDF est lu sur cet appareil. Tu peux ajuster le classement avant de créer les tâches.</p>
+      <label for="auditProject">Projet de destination</label>
+      <select id="auditProject"></select>
+      <details id="auditPastePanel" class="disclosure">
+        <summary>Coller le texte d’un audit</summary>
+        <label for="auditPaste">Passages à analyser</label>
+        <textarea id="auditPaste" placeholder="Problème : …&#10;Solution proposée : …"></textarea>
+        <button type="button" class="button small" id="auditAnalyseText">Analyser le texte</button>
+      </details>
+      <p id="auditSource" class="audit-source" hidden></p>
+      <p id="auditStatus" role="status" aria-live="polite"></p>
+      <details id="auditExtract" class="disclosure" hidden>
+        <summary>Voir le texte lu</summary>
+        <pre id="auditExtractText" class="document-text"></pre>
+      </details>
+      <div id="auditTools" class="toolbar" hidden>
+        <button type="button" class="button small" id="auditSelect">Tout sélectionner</button>
+        <button type="button" class="button small" id="auditClear">Tout désélectionner</button>
+        <button type="button" class="button small" id="auditAdd">Ajouter une proposition</button>
+      </div>
+      <div id="auditList"></div>
+      <div class="dialog-actions audit-actions">
+        <span id="auditCount" aria-live="polite"></span>
+        <button type="button" class="button" data-close-audit>Annuler</button>
+        <button type="submit" class="button primary" id="auditCreate" disabled>Créer les tâches</button>
+      </div>
+    </form>
+  </dialog>
 </body>
 </html>

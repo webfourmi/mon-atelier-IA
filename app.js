@@ -47,7 +47,7 @@
   function roleOptions(selected,all=false){return (all?'<option value="">Tous les postes</option>':'')+C.ROLES.map(r=>`<option value="${r.id}" ${selected===r.id?'selected':''}>${r.n} · ${esc(r.name)}</option>`).join('');}
   function statusOptions(selected,legacy=false){return C.STATUSES.map(s=>`<option value="${s.id}" ${s.id===selected?'selected':''}>${legacy&&s.id==='done'?'Ancienne tâche terminée · à revérifier':s.name}</option>`).join('');}
   function fieldsTask(p,t){const deps=C.unresolved(p,t);return [t.blocked,t.invalidatedReason,...deps.map(x=>x.reason+' : '+x.title)].filter(Boolean).join(' · ');}
-  function taskCard(p,t){const blocker=fieldsTask(p,t);return `<article class="task-card ${blocker?'blocked':''}"><span class="badge ${t.priority==='high'?'amber':''}">${esc(C.role(t.role).name)}</span><h3>${esc(t.title)}</h3>${t.workflowRunId?'<p class="badge">'+esc(t.workflowName)+' · étape '+(t.workflowStepIndex+1)+'/'+t.workflowStepCount+'</p>':''}${t.legacyCompleted?'<p class="badge amber">Ancienne tâche terminée · à revérifier</p>':''}${t.deliverable?'<p>'+esc(t.deliverable)+'</p>':''}${blocker?'<div class="block-note">'+esc(blocker)+'</div>':''}<div class="task-foot"><small>${esc(t.owner)}</small>${btn('edit-task','Ouvrir','small',`data-id="${esc(t.id)}"`)}</div></article>`;}
+  function taskCard(p,t){const blocker=fieldsTask(p,t);return `<article class="task-card ${blocker?'blocked':''}"><span class="badge ${t.priority==='high'?'amber':''}">${esc(C.role(t.role).name)}</span>${t.auditSource?'<span class="badge">Priorité '+esc(window.AtelierAudit.levels[t.priority]||'Normale')+'</span>':''}<h3>${esc(t.title)}</h3>${t.workflowRunId?'<p class="badge">'+esc(t.workflowName)+' · étape '+(t.workflowStepIndex+1)+'/'+t.workflowStepCount+'</p>':''}${t.legacyCompleted?'<p class="badge amber">Ancienne tâche terminée · à revérifier</p>':''}${t.deliverable?'<p>'+esc(t.deliverable)+'</p>':''}${blocker?'<div class="block-note">'+esc(blocker)+'</div>':''}<div class="task-foot"><small>${esc(t.owner)}</small>${btn('edit-task','Ouvrir','small',`data-id="${esc(t.id)}"`)}</div></article>`;}
   function render(){
     const p=current();if(p)projectId=p.id;
     if(projectId!==draftProjectId)loadProjectDraft();
@@ -188,10 +188,28 @@
     return heading('ÉQUIPE DU PROJET','Dix postes, un dossier commun.','Chaque poste a sa mission et un résultat à transmettre. Toi, ChatGPT ou Claude pouvez intervenir selon la tâche.')+
       `<div class="grid three">${C.ROLES.map(r=>{const open=p.workItems.filter(t=>t.role===r.id&&(t.status!=='done'||t.legacyCompleted)).length;return `<article class="card role-card"><div class="role-number"><span>POSTE ${r.n}</span><span class="badge">${open} à suivre</span></div><div class="role-short">${esc(r.short)}</div><h3>${esc(r.name)}</h3><p class="muted">${esc(r.mission)}</p>${aiAdvice(r)}<small class="muted">${p.handoffs.filter(h=>h.role===r.id).length} mission(s) suivie(s)</small><div class="toolbar"><a class="button small" href="#postes/${r.id}">Ouvrir le poste →</a>${btn('new-task','＋ Tâche','small ghost',`data-role="${r.id}"`)}</div></article>`;}).join('')}</div>`;
   }
+  function openAuditImport(p) {
+    window.AtelierAuditImport.open({
+      projects:state.projects,activeProject:p,escape:esc,roleOptions,
+      save(destination,tasks) {
+        if (!editable() || !state.projects.includes(destination)) throw Error('Le projet a changé. Rouvre l’import depuis le tableau des tâches.');
+        const previous=destination.workItems, updated=state.updatedAt;
+        snapshot();
+        destination.workItems=[...previous,...tasks];
+        if (!persist()) {
+          destination.workItems=previous;
+          state.updatedAt=updated;
+          throw Error(writeLock ? 'Une autre fenêtre a modifié le projet. Recharge l’atelier avant de reprendre l’import.' : 'L’enregistrement a échoué. Les propositions restent disponibles dans cet aperçu.');
+        }
+        setProject(destination.id);
+        toast(tasks.length===1 ? 'Une tâche ajoutée à '+destination.name+'.' : tasks.length+' tâches ajoutées à '+destination.name+'.');
+      }
+    });
+  }
   function tasksPage(p){
     const items=p.workItems.filter(t=>(!filterRole||t.role===filterRole)&&(!filterOwner||t.owner===filterOwner)&&(!filterQuery||(t.title+' '+t.objective+' '+t.deliverable).toLocaleLowerCase('fr').includes(filterQuery.toLocaleLowerCase('fr'))));
     const owners=[...new Set(p.workItems.map(t=>t.owner))];
-    return dependenciesPanel(p)+heading('TABLEAU DES TÂCHES','Du besoin au résultat vérifié.','Ouvre une tâche pour retrouver son objectif, ses fichiers, le résultat attendu et les vérifications.',btn('new-task','＋ Nouvelle tâche','primary'))+
+    return dependenciesPanel(p)+heading('TABLEAU DES TÂCHES','Du besoin au résultat vérifié.','Ouvre une tâche pour retrouver son objectif, ses fichiers, le résultat attendu et les vérifications.',btn('import-audit','Importer un audit PDF')+btn('new-task','＋ Nouvelle tâche','primary'))+
       `<div class="filters"><div><label for="taskSearch">Rechercher</label><input id="taskSearch" placeholder="Une tâche, un résultat…" value="${esc(filterQuery)}"></div><div><label for="filterRole">Poste</label><select id="filterRole">${roleOptions(filterRole,true)}</select></div><div><label for="filterOwner">Intervenant</label><select id="filterOwner"><option value="">Tous les intervenants</option>${owners.map(o=>`<option ${o===filterOwner?'selected':''}>${esc(o)}</option>`).join('')}</select></div></div><div class="${advancedMode()?'board':'task-list'}">${C.STATUSES.filter(s=>advancedMode()||items.some(t=>(t.legacyCompleted?'review':t.status)===s.id)).map(s=>`<section class="board-column" aria-label="${s.name}"><div class="board-title"><span>${s.name}</span><span>${items.filter(t=>(t.legacyCompleted?'review':t.status)===s.id).length}</span></div>${items.filter(t=>(t.legacyCompleted?'review':t.status)===s.id).map(t=>taskCard(p,t)).join('')||'<div class="empty">Aucune tâche</div>'}</section>`).join('')||empty('Aucune tâche pour ces filtres.')}</div>`;
   }
   function dossierPage(p){
@@ -270,6 +288,9 @@
   }
   // Fiche quotidienne réduite aux trois informations utiles.
   // Les informations historiques et techniques restent dans la tâche.
+  function hasAuditProposal(task) {
+    return !!task?.auditSource && !task.result && ['draft','ready','doing'].includes(task.status);
+  }
   function saveSimpleTask(p,t,fd,finish=false){
     const title=String(fd.get('title')||'').trim(),problem=String(fd.get('problem')||'').trim(),solution=String(fd.get('solution')||'').trim();
     if(!title)throw Error('Indique le nom de la tâche.');
@@ -277,6 +298,10 @@
     const previous=t||C.makeTask(p,problem||title);
     const next={...previous,id:previous.id||C.uid(),title,objective:problem,
       result:solution,updatedAt:now()};
+    if(hasAuditProposal(t)){
+      next.deliverable=solution;
+      next.result=finish?solution:'';
+    }
     if(!t)next.status='draft';
     if(finish){
       if(next.blocked||C.unresolved(p,next).length)throw Error('Cette tâche comporte un blocage ou des prérequis non terminés. Résous-les avant de la valider.');
@@ -297,7 +322,9 @@
       '<p class="help">L’essentiel : le nom, le problème et la solution. Les paramètres techniques sont conservés dans les options avancées.</p>'+
       '<label for="simpleTaskTitle">Nom de la tâche</label><input id="simpleTaskTitle" name="title" value="'+esc(item.title||'')+'" required autofocus>'+
       '<label for="simpleTaskProblem">Problème</label><textarea id="simpleTaskProblem" name="problem" placeholder="Ce qui ne fonctionne pas ou ce que tu souhaites améliorer…">'+esc(item.objective||'')+'</textarea>'+
-      '<label for="simpleTaskSolution">Solution</label><textarea id="simpleTaskSolution" name="solution" placeholder="La correction ou le résultat obtenu…">'+esc(item.result||'')+'</textarea>'+
+      '<label for="simpleTaskSolution">'+(hasAuditProposal(item)?'Solution proposée':'Solution')+'</label><textarea id="simpleTaskSolution" name="solution" placeholder="La correction ou le résultat obtenu…">'+esc(hasAuditProposal(item)?item.deliverable:item.result||'')+'</textarea>'+
+      (item.auditSource?'<p class="help">'+esc(window.AtelierAudit.sourceLabel(item.auditSource))+'</p>':'')+
+      (hasAuditProposal(item)?'<p class="help">En terminant cette tâche, tu confirmes que la solution a été appliquée.</p>':'')+
       '<p class="help">Une tâche terminée est validée manuellement. Aucun test technique ne sera considéré comme effectué automatiquement.</p>'+
       '<div class="toolbar">'+btn('complete-simple-task',t&&C.isValidated(t)?'Valider à nouveau':'✓ Terminer la tâche','primary')+
       (t?btn('task-to-transfer','Préparer le prompt','small', 'data-id="'+esc(t.id)+'"'):'')+
@@ -390,6 +417,7 @@
       case 'import-result':beginResultImport(p,p.workItems.find(t=>t.id===id));break;
       case 'choose-result-file':$('#resultImportFile').click();break;
       case 'preview-result':previewResultImport();break;
+      case 'import-audit':if(editable())openAuditImport(p);break;
       case 'audit-coherence':await auditCoherence(p);break;
       case 'record-version':recordVersionEditor(p);break;
       case 'download-version':{const r=(p.releases||[]).find(r=>r.id===id);download(C.slug(p.name)+'-'+C.slug(r.version)+'-etat.json',JSON.stringify({format:'atelier-version-reference',version:r.version,snapshot:r.snapshot,notice:'État des textes et références ; originaux binaires non inclus.'},null,2),'application/json');break;}

@@ -12,3 +12,29 @@
 .mode-switch{margin-bottom:14px}.mode-switch label{font-size:10px;letter-spacing:1px;font-weight:700}.mode-switch select{margin-top:7px}.mode-switch .help{margin:6px 0;font-size:11px}.nav-more>summary,.detail-options>summary{cursor:pointer;color:var(--green);font-weight:650;padding:12px 4px}.detail-options{border:1px solid var(--line);border-radius:9px;margin:14px 0;padding:0 12px 12px}.page-jumps{display:flex;gap:12px;align-items:center;margin-bottom:22px;flex-wrap:wrap}.page-jumps label{margin:0 0 0 auto}.page-jumps select{width:auto;max-width:65%;margin:0}.task-list{display:grid;gap:16px}.task-list .board-column{min-width:0;min-height:0}.task-list .task-card{margin-top:10px}.nav-more a{font-size:12px}@media(max-width:760px){.mode-switch{padding:0 4px}.mode-switch .help{display:none}.page-jumps{gap:8px}.page-jumps select{max-width:60%}}
 
 .stats-cards{margin:18px 0}.stats-cards+.help{margin:12px 0 20px}#main[data-page="bilans"] .toolbar+.help{margin-top:12px}
+
+#auditDialog { width:min(48rem,94vw); }
+#auditForm { padding-bottom:0; }
+#auditForm input, #auditForm textarea, #auditForm select { font-size:1rem; }
+#auditForm .help { margin:-0.4rem 0 1.25rem; }
+#auditPastePanel { margin-bottom:1rem; }
+.audit-source { overflow-wrap:anywhere; font-weight:650; margin:1.25rem 0 0.35rem; }
+#auditStatus { font-size:0.95rem; }
+#auditTools { margin-bottom:0.75rem; }
+.audit-row { border-top:1px solid var(--line); padding:0.85rem 0; }
+.audit-check { display:flex; gap:0.6rem; align-items:baseline; font-size:1rem; cursor:pointer; overflow-wrap:anywhere; }
+.audit-check input[type=checkbox] { flex:none; margin:0; }
+.audit-meta { color:var(--muted); margin:0.25rem 0 0.25rem 1.6rem; font-size:0.84rem; }
+.audit-row summary { color:var(--green); cursor:pointer; margin-left:1.6rem; font-size:0.9rem; }
+.audit-row details[open] summary { margin-bottom:0.8rem; }
+.audit-row details label { margin-top:0.65rem; }
+.audit-row details input, .audit-row details textarea, .audit-row details select { margin:0.3rem 0 0; }
+.audit-row textarea { min-height:4.5rem; }
+.audit-existing .audit-check span { color:var(--muted); }
+.audit-meta [data-duplicate] { font-weight:650; color:var(--ink); }
+.audit-actions { position:sticky; bottom:0; background:var(--paper); align-items:center; flex-wrap:wrap; padding:0.9rem 0; }
+#auditCount { margin-right:auto; font-size:0.9rem; }
+@media (max-width:600px) {
+  #auditCount:not(:empty) { width:100%; }
+  .audit-actions { gap:0.5rem; }
+}
