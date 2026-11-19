@@ -4,7 +4,7 @@ Un atelier personnel pour organiser les projets menés avec ChatGPT et Claude : 
 
 ## Démarrer sur ordinateur
 
-Télécharger les fichiers du dépôt, décompresser le dossier, puis ouvrir **index.html** dans Chrome, Edge ou Firefox. Garder `styles.css`, `core.js`, `planning.js`, `workflows.js`, `github.js` et `app.js` à côté de `index.html`.
+Télécharger les fichiers du dépôt, décompresser le dossier, puis ouvrir **index.html** dans Chrome, Edge ou Firefox. Garder `styles.css`, `core.js`, `planning.js`, `workflows.js`, `github.js`, `audit.js`, `audit-import.js`, `app.js` et le dossier `vendor` à côté de `index.html`.
 
 Aucune installation ni API IA payante n’est nécessaire pour utiliser l’application. GitHub nécessite une connexion Internet. Les échanges avec les IA se font par copie du contexte et ajout manuel des pièces jointes.
 
@@ -229,3 +229,13 @@ Les circuits organisent des relais séquentiels. Ils ne lancent pas plusieurs IA
 ## Fiche tâche simplifiée
 
 La fiche de tâche par défaut contient uniquement **Nom de la tâche**, **Problème** et **Solution**. Le bouton « Terminer la tâche » demande une solution et enregistre une validation manuelle explicite sans revendiquer de tests techniques. Les anciens champs et le circuit détaillé restent accessibles dans « Options avancées ». Une modification de la solution d’une tâche validée invalide la validation précédente. Les métadonnées et fichiers existants sont conservés.
+
+## Importer un audit PDF dans les tâches
+
+Dans **Tâches**, choisir **Importer un audit PDF**, puis sélectionner le document. L’aperçu présente les propositions tirées des tableaux, des listes et des fiches de constat. Chaque proposition possède un poste et une priorité modifiables. Quand la priorité manque dans le document, l’atelier propose **Normale**. Le projet actif est proposé par défaut. Si le nom d’un seul projet est reconnu dans le titre ou le nom du fichier, ce projet est présélectionné.
+
+Relire le classement, ajuster le nom, le problème ou la solution et ajouter une proposition si nécessaire. **Créer les tâches** enregistre la sélection dans **À préparer**. Le nom du PDF et la page accompagnent la tâche. Un nouvel import signale les entrées déjà présentes dans ce projet. La solution reste une proposition jusqu’à la validation manuelle de la tâche.
+
+Dans un tableau, l’atelier utilise les bordures et l’alignement du texte pour séparer les constats et conserver les phrases écrites sur plusieurs lignes. Deux propositions peuvent porter le même titre. Le message **Même titre · compare les constats** permet de relire leurs références, leurs problèmes et leurs solutions. Elles restent sélectionnables. L’atelier reconnaît également la ligne d’origine lors d’un nouvel import du même fichier, même après un changement de nom dans la fiche.
+
+La lecture et le classement se font sur l’appareil. Pour un scan sans texte sélectionnable, l’aperçu permet de coller le texte obtenu par reconnaissance de caractères. Le bouton **Voir le texte lu** permet de comparer les propositions avec les passages extraits.
