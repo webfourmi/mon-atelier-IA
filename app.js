@@ -131,7 +131,7 @@
   function guidedDashboard(p){
     const resume=p.workItems.filter(t=>!['done','review','returned'].includes(t.status));
     const review=p.workItems.filter(t=>['returned','review'].includes(t.status)||t.legacyCompleted);
-    return continuityPanel(p)+heading('V3.4 · PARCOURS GUIDÉ','Que souhaites-tu faire ?','Décris une idée, reprends une mission ou vérifie un résultat.')+`<div class="grid three section-gap"><section class="card"><h2>1. Décrire une idée</h2><p>Une fiche tâche et une consigne sont préparées sur cet ordinateur.</p>${btn('guided-idea','Décrire mon idée','primary')}</section><section class="card"><h2>2. Reprendre</h2>${resume.slice(0,3).map(t=>taskCard(p,t)).join('')||'<p>Aucune mission en cours.</p>'}</section><section class="card"><h2>3. Vérifier</h2><p>Travail rendu → À vérifier → Validé. Les tâches anciennes restent à revérifier.</p>${review.slice(0,3).map(t=>taskCard(p,t)).join('')||'<p>Aucun résultat à vérifier.</p>'}</section></div>`;
+    return continuityPanel(p)+heading('V3.4 · PARCOURS GUIDÉ','Que souhaites-tu faire ?','Décris une idée, reprends une mission ou vérifie un résultat.',btn('new-task','Nouvelle tâche','primary'))+`<div class="grid three section-gap"><section class="card"><h2>1. Décrire une idée</h2><p>Une fiche tâche et une consigne sont préparées sur cet ordinateur.</p>${btn('guided-idea','Décrire mon idée','primary')}</section><section class="card"><h2>2. Reprendre</h2>${resume.slice(0,3).map(t=>taskCard(p,t)).join('')||'<p>Aucune mission en cours.</p>'}</section><section class="card"><h2>3. Vérifier</h2><p>Travail rendu → À vérifier → Validé. Les tâches anciennes restent à revérifier.</p>${review.slice(0,3).map(t=>taskCard(p,t)).join('')||'<p>Aucun résultat à vérifier.</p>'}</section></div>`;
   }
   function ideaEditor(p){
     editor('Décrire mon idée',`<label for="idea">Que veux-tu réaliser ?</label><textarea id="idea" name="idea" required autofocus></textarea><p>Proposition locale par mots-clés : tu pourras modifier le poste, l’IA et les critères dans la fiche.</p>`,fd=>{
@@ -291,12 +291,13 @@
   function hasAuditProposal(task) {
     return !!task?.auditSource && !task.result && ['draft','ready','doing'].includes(task.status);
   }
-  function saveSimpleTask(p,t,fd,finish=false){
-    const title=String(fd.get('title')||'').trim(),problem=String(fd.get('problem')||'').trim(),solution=String(fd.get('solution')||'').trim();
-    if(!title)throw Error('Indique le nom de la tâche.');
-    if(finish&&!solution)throw Error('Indique la solution avant de terminer la tâche.');
-    const previous=t||C.makeTask(p,problem||title);
-    const next={...previous,id:previous.id||C.uid(),title,objective:problem,
+  function saveSimpleTask(p,t,fd,finish,selectedRole){
+    const title=fd.get('title'),problem=fd.get('problem'),solution=fd.get('solution');
+    if(!title.trim())throw Error('Indique le nom de la tâche.');
+    if(finish&&!solution.trim())throw Error('Indique la solution avant de terminer la tâche.');
+    if(current()!==p||(t&&!p.workItems.includes(t)))throw Error('Le projet ou la tâche a changé. Rouvre la fiche avant de poursuivre.');
+    const previous=t||C.makeTask(p,problem.trim()||title,selectedRole);
+    const next={...previous,id:previous.id||C.uid(),title:t?.title===title?title:title.trim(),objective:problem,
       result:solution,updatedAt:now()};
     if(hasAuditProposal(t)){
       next.deliverable=solution;
@@ -307,29 +308,47 @@
       if(next.blocked||C.unresolved(p,next).length)throw Error('Cette tâche comporte un blocage ou des prérequis non terminés. Résous-les avant de la valider.');
       next.status='done';next.validationVersion=3;next.legacyCompleted=false;
       next.criteria=next.criteria||'Solution jugée satisfaisante par l’utilisateur.';
-      next.evidence='Validation manuelle par l’utilisateur. Aucun test technique déclaré dans cette fiche simplifiée.';
+      if(!next.evidence||solution!==(t?.result||''))next.evidence='Validation manuelle par l’utilisateur. Aucun test technique déclaré dans cette fiche simplifiée.';
       next.completedAt=now();next.invalidatedReason='';
-    }else if(t&&C.isValidated(t)&&(title!==t.title||problem!==t.objective||solution!==t.result)){
+    }else if(t&&C.isValidated(t)&&(next.title!==t.title||problem!==t.objective||solution!==(t.result||''))){
       next.status='review';next.completedAt='';next.validationVersion=0;
     }
-    if(!change(()=>{if(t)Object.assign(t,next);else p.workItems.push(next);}))return false;
-    if(finish)toast('Tâche validée : la solution rejoint le dossier commun.');
+    const previousItems=p.workItems,previousUpdatedAt=state.updatedAt;
+    snapshot();
+    p.workItems=t?previousItems.map(item=>item===t?next:{...item}):[...previousItems.map(item=>({...item})),next];
+    C.reconcileDependencies(p);
+    if(!persist()){
+      p.workItems=previousItems;
+      state.updatedAt=previousUpdatedAt;
+      throw Error(writeLock?'Les données ont changé dans une autre fenêtre. Copie ta saisie avant de recharger.':'L’enregistrement a échoué. Tu peux réessayer sans ressaisir la tâche.');
+    }
+    if(!t){
+      filterRole=filterOwner=filterQuery='';
+      navigate('taches');
+    }else render();
+    toast(finish?'Tâche terminée et enregistrée.':'Tâche enregistrée.');
     return true;
   }
-  function editTask(p,t=null,selectedRole='pilotage',seed=null){
-    const item=t||seed||C.makeTask(p,'',selectedRole);
+  function editTask(p,t=null,selectedRole='pilotage'){
+    const item=t||{};
     editor(t?'Tâche · '+t.title:'Nouvelle tâche',
-      '<p class="help">L’essentiel : le nom, le problème et la solution. Les paramètres techniques sont conservés dans les options avancées.</p>'+
+      '<p>Projet · <strong>'+esc(p.name)+'</strong></p>'+
       '<label for="simpleTaskTitle">Nom de la tâche</label><input id="simpleTaskTitle" name="title" value="'+esc(item.title||'')+'" required autofocus>'+
       '<label for="simpleTaskProblem">Problème</label><textarea id="simpleTaskProblem" name="problem" placeholder="Ce qui ne fonctionne pas ou ce que tu souhaites améliorer…">'+esc(item.objective||'')+'</textarea>'+
-      '<label for="simpleTaskSolution">'+(hasAuditProposal(item)?'Solution proposée':'Solution')+'</label><textarea id="simpleTaskSolution" name="solution" placeholder="La correction ou le résultat obtenu…">'+esc(hasAuditProposal(item)?item.deliverable:item.result||'')+'</textarea>'+
+      '<label for="simpleTaskSolution">'+(item.status==='done'?'Solution appliquée':'Solution envisagée')+'</label><textarea id="simpleTaskSolution" name="solution">'+esc(hasAuditProposal(item)?item.deliverable:item.result||'')+'</textarea>'+
       (item.auditSource?'<p class="help">'+esc(window.AtelierAudit.sourceLabel(item.auditSource))+'</p>':'')+
       (hasAuditProposal(item)?'<p class="help">En terminant cette tâche, tu confirmes que la solution a été appliquée.</p>':'')+
       '<p class="help">Une tâche terminée est validée manuellement. Aucun test technique ne sera considéré comme effectué automatiquement.</p>'+
       '<div class="toolbar">'+btn('complete-simple-task',t&&C.isValidated(t)?'Valider à nouveau':'✓ Terminer la tâche','primary')+
       (t?btn('task-to-transfer','Préparer le prompt','small', 'data-id="'+esc(t.id)+'"'):'')+
-      btn('advanced-task','Options avancées','small ghost',t?'data-id="'+esc(t.id)+'"':'')+'</div>',
-      fd=>saveSimpleTask(p,t,fd,false));
+      btn('advanced-task','Options avancées','small ghost',`data-role="${esc(selectedRole)}"`)+'</div>'+
+      '<p id="simpleTaskError" class="block-note" role="alert" hidden></p>',
+      (fd,finish=false)=>{
+        const error=$('#simpleTaskError');
+        error.hidden=true;
+        try{return saveSimpleTask(p,t,fd,finish,selectedRole);}
+        catch(e){error.textContent=e.message;error.hidden=false;return false;}
+      });
     $('#editor').dataset.taskId=t?.id||'';
   }
   function editDocument(p,d){editor(d?'Document de référence':'Ajouter un document',`<label for="documentTitle">Titre</label><input id="documentTitle" name="title" value="${esc(d?.title||'')}" required><label for="documentContent">Contenu de référence</label><textarea id="documentContent" name="content" class="tall">${esc(d?.content||'')}</textarea>`,fd=>{if(!fd.get('title').trim())throw Error('Donne un titre au document.');change(()=>{if(d){d.title=fd.get('title').trim();d.content=fd.get('content');d.updatedAt=now();}else p.documents.push({id:C.uid(),title:fd.get('title').trim(),kind:'note',content:fd.get('content'),updatedAt:now()});});});}
@@ -424,7 +443,7 @@
 
       case 'copy-bilan':await copy(C.missionReport(p,bilanRole,bilanAI));break;
       case 'export-bilan':download(C.slug(p.name)+'-bilan-ia.md',C.missionReport(p,bilanRole,bilanAI));break;
-      case 'accept-suggestion':if(editable()){const seed=C.suggestedTask(p,id);seed.criteria+='\n'+C.template(p).checks.join('\n');editTask(p,null,'pilotage',seed);}break;
+      case 'accept-suggestion':if(editable()){const seed=C.suggestedTask(p,id);seed.criteria+='\n'+C.template(p).checks.join('\n');editTaskAdvanced(p,null,'pilotage',seed);}break;
       case 'github-overview':await readGithubOverview(p);break;
       case 'copy-release':await copy(C.deliveryNotes(p));break;
       case 'export-release':download(C.slug(p.name)+'-preparation-livraison.md',C.deliveryNotes(p));break;
@@ -436,23 +455,22 @@
       case 'duplicate-project':if(editable()){const original=state.projects.find(x=>x.id===id);change(()=>{const q=C.clone(original);q.id=C.uid();q.name+=' (copie)';q.github.path='.atelier-ia/'+C.slug(q.id)+'/dossier-commun.json';delete q.github.lastSync;delete q.github.lastSha;state.projects.push(q);projectId=q.id;});loadProjectDraft();toast('Projet dupliqué.');}break;
       case 'delete-project':{const target=state.projects.find(x=>x.id===id);if(target&&editable()&&confirm('Supprimer le projet « '+target.name+' » ? Une copie des textes sera conservée.')){snapshot(true);change(()=>{state.projects=state.projects.filter(x=>x.id!==id);projectId=state.projects[0]?.id||'';});loadProjectDraft();}break;}
       case 'complete-simple-task':{
-        if(!editable())break;
-        const fd=new FormData($('#editorForm'));if(!String(fd.get('title')||'').trim())throw Error('Indique le nom de la tâche.');
-        const existing=($('#editor').dataset.taskId||'')?p.workItems.find(t=>t.id===$('#editor').dataset.taskId):null;
-        if(saveSimpleTask(p,existing,fd,true))closeEditor();
+        if($('#editorForm').reportValidity()&&editorSubmit(new FormData($('#editorForm')),true))closeEditor();
         break;
       }
       case 'advanced-task':{
-        if(!confirm('Passer à la fiche avancée ? Les modifications non enregistrées dans cette fenêtre ne seront pas conservées.'))break;
         const existing=($('#editor').dataset.taskId||'')?p.workItems.find(t=>t.id===$('#editor').dataset.taskId):null;
-        const title=$('#simpleTaskTitle')?.value||'';
-        closeEditor();editTaskAdvanced(p,existing,el.dataset.role||roleId||filterRole||'pilotage',existing?null:{...C.makeTask(p,title),title});
+        if(existing&&!confirm('Passer à la fiche avancée ? Les modifications non enregistrées dans cette fenêtre ne seront pas conservées.'))break;
+        const selectedRole=el.dataset.role;
+        const title=$('#simpleTaskTitle').value,objective=$('#simpleTaskProblem').value,result=$('#simpleTaskSolution').value;
+        const draft=existing?null:{...C.makeTask(p,title.trim()||'Mission',selectedRole),status:'draft',title,objective,result};
+        closeEditor();editTaskAdvanced(p,existing,selectedRole,draft);
         break;
       }
       case 'new-task':if(editable())editTask(p,null,el.dataset.role||roleId||filterRole||'pilotage');break;
       case 'edit-task':if(editable())editTask(p,p.workItems.find(t=>t.id===id));break;
       case 'delete-task':{const t=p.workItems.find(x=>x.id===id);if(t&&confirm('Supprimer cette tâche ? Les tâches qui en dépendent seront signalées comme bloquées.')){change(()=>{p.workItems=p.workItems.filter(x=>x.id!==id);for(const x of p.workItems)if(x.dependsOn.includes(id)){x.dependsOn=x.dependsOn.filter(d=>d!==id);x.blocked=x.blocked||'Prérequis supprimé : '+t.title+'. Revoir cette dépendance.';if(x.status==='done')x.status='review';}});closeEditor();}break;}
-      case 'task-to-transfer':{if(!$('#editorForm').reportValidity())return;if(editorSubmit)await editorSubmit(new FormData($('#editorForm')));closeEditor();const t=p.workItems.find(x=>x.id===id);transferDraft.task=id;transferDraft.includeContext=false;transferDraft.role=t.role;selectTaskAI(t);transferDraft.request='';delete transferDraft.documents;change(()=>p.transferDraft={...transferDraft},false);navigate('transmissions');break;}
+      case 'task-to-transfer':{if(!$('#editorForm').reportValidity())return;if(editorSubmit&&await editorSubmit(new FormData($('#editorForm')))===false)return;closeEditor();const t=p.workItems.find(x=>x.id===id);transferDraft.task=id;transferDraft.includeContext=false;transferDraft.role=t.role;selectTaskAI(t);transferDraft.request='';delete transferDraft.documents;change(()=>p.transferDraft={...transferDraft},false);navigate('transmissions');break;}
       case 'role-handoff':transferRoleAction(el.dataset.role);break;
       case 'role-review':transferRoleAction(el.dataset.role,true);break;
       case 'dossier-tab':docTab=id;render();break;
@@ -508,7 +526,7 @@
   let assetProjectId='';
   document.addEventListener('click',async event=>{const el=event.target.closest('[data-action]');if(!el)return;event.preventDefault();if(el.disabled)return;const original=el.disabled;el.disabled=true;try{await action(el.dataset.action,el);}catch(e){if(e.name!=='AbortError')toast(e.message||'Cette action a échoué.');}finally{el.disabled=original;}});
   document.addEventListener('submit',async event=>{
-    if(event.target.id==='editorForm'){event.preventDefault();if(!editorSubmit)return;const submit=event.target.querySelector('button[type=submit]');submit.disabled=true;try{await editorSubmit(new FormData(event.target));closeEditor();}catch(e){toast(e.message);}finally{submit.disabled=false;}}
+    if(event.target.id==='editorForm'){event.preventDefault();if(!editorSubmit)return;const submit=event.target.querySelector('button[type=submit]');submit.disabled=true;try{if(await editorSubmit(new FormData(event.target))!==false)closeEditor();}catch(e){toast(e.message);}finally{submit.disabled=false;}}
     if(event.target.id==='releaseForm'){event.preventDefault();try{const fd=new FormData(event.target);change(()=>pReleaseSave(current(),fd));toast('Préparation de livraison enregistrée.');}catch(e){toast(e.message);}}
     if(event.target.id==='repoForm'){event.preventDefault();try{const fd=new FormData(event.target),repo=C.parseRepo(fd.get('repo')),path=C.safePath(fd.get('path')),branch=fd.get('branch').trim();if(/[\x00-\x1f]/.test(branch))throw Error('Le nom de branche est invalide.');const p=current();change(()=>{p.github={...repo,branch,path};githubCache.delete(p.id);prepared.delete(p.id);remoteDossiers.delete(p.id);});toast('Dépôt associé. Tu peux vérifier son accès.');}catch(e){toast(e.message);}}
     if(event.target.id==='tokenForm'){event.preventDefault();const input=$('#githubToken'),token=input.value.trim();if(!token){toast('Ajoute un jeton pour ouvrir une session GitHub.');return;}input.value='';const button=event.target.querySelector('button[type=submit]');button.disabled=true;sessionToken=token;try{const user=await gh.request('/user');sessionUser=user.login;render();toast('Session GitHub ouverte.');}catch(e){sessionToken='';sessionUser='';button.disabled=false;toast(e.message);}}

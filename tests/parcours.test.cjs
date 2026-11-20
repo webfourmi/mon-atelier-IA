@@ -33,15 +33,88 @@ async function setup(raw=null,fetcher=async()=>{throw new TypeError('Offline');}
 }
 function legacy(){return {projects:[{id:'old',name:'Projet existant',description:'Données de travail',context:'Contexte personnel conservé',decisions:'Une règle validée',tasks:'Ancienne tâche'}],prompts:[{id:'p',title:'Ma consigne',text:'À conserver'}],comparisons:[{id:'c',title:'Avant',a:'Réponse A',b:'Réponse B',date:'16/11/2026'}]};}
 async function newTask(env,{title,role='programmation',status='ready',blocked='',depends=''}={}){
-  await env.click('[data-action="new-task"]');env.fill('#taskTitle',title);env.fill('#taskRole',role);env.fill('#taskStatus',status);env.fill('#taskDeliverable','Un résultat concret');env.fill('#taskCriteria','Un contrôle observable');env.fill('#taskBlocked',blocked);if(depends){env.$('#taskDeps').value=depends;}await env.submit('#editorForm');
+  await env.click('[data-action="new-task"]');await env.click('[data-action="advanced-task"]');env.fill('#taskTitle',title);env.fill('#taskRole',role);env.fill('#taskStatus',status);env.fill('#taskDeliverable','Un résultat concret');env.fill('#taskCriteria','Un contrôle observable');env.fill('#taskBlocked',blocked);if(depends){env.$('#taskDeps').value=depends;}await env.submit('#editorForm');
 }
+
+test('Nouvelle tâche: create, edit and complete in the selected project across restarts',async()=>{
+  const raw=legacy();
+  raw.projects.push({...raw.projects[0],id:'second',name:'Deuxième projet',tasks:'Autre tâche existante'});
+  const e=await setup(raw);
+  let saved,id;
+  try{
+    const before=e.state();
+    e.fill('#projectSelect','second','change');
+    await e.click('[data-action="new-task"]');
+    assert.match(e.$('#editorBody').textContent,/Deuxième projet/);
+    e.fill('#simpleTaskTitle','   ');
+    await e.submit('#editorForm');
+    assert.equal(e.$('#simpleTaskError').hidden,false);
+    assert.deepEqual(e.state(),before);
+    e.fill('#simpleTaskTitle','  Réparer le bouton  ');
+    e.fill('#simpleTaskProblem','Impossible de cliquer');
+    e.fill('#simpleTaskSolution','Élargir la zone cliquable');
+    await e.submit('#editorForm');
+    const created=e.state().projects[1].workItems.at(-1);
+    id=created.id;
+    assert.equal(created.title,'Réparer le bouton');
+    assert.equal(created.status,'draft');
+    assert.equal(e.window.location.hash,'#taches');
+    const open='[data-action="edit-task"][data-id="'+id+'"]';
+    await e.click(open);
+    assert.equal(e.$('#simpleTaskProblem').value,'Impossible de cliquer');
+    e.fill('#simpleTaskSolution','Agrandir le bouton');
+    await e.click('[data-action="complete-simple-task"]');
+    saved=e.state();
+    assert.deepEqual(saved.projects[0],before.projects[0]);
+    assert.deepEqual({...saved.projects[1],workItems:saved.projects[1].workItems.slice(0,-1)},before.projects[1]);
+    assert.deepEqual(saved.prompts,before.prompts);
+    assert.deepEqual(saved.comparisons,before.comparisons);
+    assert.equal(saved.projects[1].workItems.at(-1).status,'done');
+    assert(e.$('.board-column[aria-label="Validé"] '+open));
+    e.fill('#projectSelect','old','change');
+    assert.equal(e.$(open),null);
+  }finally{await e.close();}
+  const restarted=await setup(saved,undefined,{before:window=>window.localStorage.setItem('atelier-ia-project','second')});
+  try{
+    await restarted.nav('taches');
+    await restarted.click('[data-action="edit-task"][data-id="'+id+'"]');
+    assert.equal(restarted.$('#simpleTaskSolution').value,'Agrandir le bouton');
+    restarted.fill('#simpleTaskSolution','Nouvelle correction');
+    await restarted.submit('#editorForm');
+    const edited=restarted.state().projects[1].workItems.at(-1);
+    assert.equal(edited.id,id);
+    assert.equal(edited.status,'review');
+    assert.equal(edited.result,'Nouvelle correction');
+  }finally{await restarted.close();}
+});
+
+test('Nouvelle tâche: failed storage keeps form and retry saves exactly one task',async()=>{
+  const e=await setup(legacy());
+  try{
+    const before=e.state(),storage=e.window.localStorage,setItem=storage.setItem.bind(storage);
+    await e.click('[data-action="new-task"]');
+    e.fill('#simpleTaskTitle','À sauvegarder');
+    Object.defineProperty(storage,'setItem',{value(key,value){
+      if(key==='atelier-ia-v1')throw new Error('Quota exceeded');
+      setItem(key,value);
+    },configurable:true});
+    try{await e.submit('#editorForm');}finally{Object.defineProperty(storage,'setItem',{value:setItem,configurable:true});}
+    assert.deepEqual(e.state(),before);
+    assert.equal(e.$('#simpleTaskError').hidden,false);
+    assert.equal(e.$('#simpleTaskTitle').value,'À sauvegarder');
+    assert.equal(e.$('#editor').open,true);
+    await e.submit('#editorForm');
+    assert.equal(e.state().projects[0].workItems.filter(t=>t.title==='À sauvegarder').length,1);
+    assert.equal(e.$('#editor').open,false);
+  }finally{await e.close();}
+});
 
 test('boot: dashboard, ten roles, documents and all navigation pages',async()=>{const e=await setup();try{assert.equal(e.state().projects.length,3);await e.nav('postes');assert.equal(e.$('#main').querySelectorAll('.role-card').length,10);for(const page of ['taches','dossier','transmissions','decisions','github','livraison','bilans','memoire','versions','circuits','prompts','comparateur','sauvegardes','pilotage']){await e.nav(page);assert(e.$('h1')?.textContent,page);}assert.equal(e.$('#notice').hidden,true);}finally{await e.close();}});
 test('migration and autosave preserve V1, create backup, survive restart',async()=>{const raw=legacy(),e=await setup(raw);let saved;try{const data=e.state();assert.equal(data.projects[0].context,raw.projects[0].context);assert.deepEqual(JSON.parse(e.window.localStorage.getItem('atelier-ia-before-v2')),raw);assert.equal(data.prompts[0].text,'À conserver');assert.equal(data.comparisons[0].a,'Réponse A');await e.nav('dossier');e.fill('#projectContext','Contexte enrichi sans perdre les données');saved=e.state();assert.equal(saved.projects[0].context,'Contexte enrichi sans perdre les données');assert(e.window.localStorage.getItem('atelier-ia-snapshots-v2'));}finally{await e.close();}const restarted=await setup(saved);try{assert.equal(restarted.state().projects[0].context,'Contexte enrichi sans perdre les données');assert.equal(restarted.state().projects[0].workItems.length,1);}finally{await restarted.close();}});
 async function returnAndReview(e,id){
-  await e.click('[data-action="edit-task"][data-id="'+id+'"]');
+  await e.click('[data-action="edit-task"][data-id="'+id+'"]');await e.click('[data-action="advanced-task"]');
   await e.click('[data-action="return-task"]');e.fill('#missionResult','Résultat livré pour '+id);e.fill('#missionChecks','Vérifié sur la version de travail');await e.submit('#editorForm');
-  await e.click('[data-action="edit-task"][data-id="'+id+'"]');e.fill('#taskStatus','review');await e.submit('#editorForm');
+  await e.click('[data-action="edit-task"][data-id="'+id+'"]');await e.click('[data-action="advanced-task"]');e.fill('#taskStatus','review');await e.submit('#editorForm');
 }
 test('tasks: guided return, review, validation and dependency guards',async()=>{
   const e=await setup(legacy());try{
@@ -49,15 +122,15 @@ test('tasks: guided return, review, validation and dependency guards',async()=>{
     const first=e.state().projects[0].workItems.find(t=>t.title==='Créer une illustration');
     await newTask(e,{title:'Intégrer une illustration',depends:first.id});
     const second=e.state().projects[0].workItems.find(t=>t.title==='Intégrer une illustration');
-    await e.click('[data-action="edit-task"][data-id="'+first.id+'"]');e.fill('#taskStatus','done');await e.submit('#editorForm');
+    await e.click('[data-action="edit-task"][data-id="'+first.id+'"]');await e.click('[data-action="advanced-task"]');e.fill('#taskStatus','done');await e.submit('#editorForm');
     assert(e.$('#toast').textContent.includes('À vérifier'));await e.click('[data-action="close-dialog"]');
-    await returnAndReview(e,second.id);await e.click('[data-action="edit-task"][data-id="'+second.id+'"]');e.fill('#taskStatus','done');await e.submit('#editorForm');
+    await returnAndReview(e,second.id);await e.click('[data-action="edit-task"][data-id="'+second.id+'"]');await e.click('[data-action="advanced-task"]');e.fill('#taskStatus','done');await e.submit('#editorForm');
     assert(e.$('#toast').textContent.includes('blocages'));await e.click('[data-action="close-dialog"]');
-    await returnAndReview(e,first.id);await e.click('[data-action="edit-task"][data-id="'+first.id+'"]');e.fill('#taskStatus','done');await e.submit('#editorForm');
+    await returnAndReview(e,first.id);await e.click('[data-action="edit-task"][data-id="'+first.id+'"]');await e.click('[data-action="advanced-task"]');e.fill('#taskStatus','done');await e.submit('#editorForm');
     assert.equal(e.state().projects[0].workItems.find(t=>t.id===first.id).status,'done');
-    await e.click('[data-action="edit-task"][data-id="'+second.id+'"]');e.fill('#taskStatus','done');await e.submit('#editorForm');
+    await e.click('[data-action="edit-task"][data-id="'+second.id+'"]');await e.click('[data-action="advanced-task"]');e.fill('#taskStatus','done');await e.submit('#editorForm');
     assert.equal(e.state().projects[0].workItems.find(t=>t.id===second.id).status,'done');
-    await e.click('[data-action="edit-task"][data-id="'+second.id+'"]');e.fill('#taskResult','Correction après validation');await e.submit('#editorForm');
+    await e.click('[data-action="edit-task"][data-id="'+second.id+'"]');await e.click('[data-action="advanced-task"]');e.fill('#taskResult','Correction après validation');await e.submit('#editorForm');
     assert.equal(e.state().projects[0].workItems.find(t=>t.id===second.id).status,'review');
     e.fill('#taskSearch','introuvable');assert.equal(e.$('#main').querySelectorAll('.task-card').length,0);
   }finally{await e.close();}
@@ -100,8 +173,8 @@ test('V2.3 completed task is kept, backed up, excluded from references until rev
     assert.deepEqual(JSON.parse(e.window.localStorage.getItem('atelier-ia-before-v3')),raw);
     assert(e.$('#main').textContent.includes('à revérifier'));
     assert.equal(e.window.AtelierCore.completedTasks(e.state().projects[0]).length,0);
-    await e.nav('taches');await e.click('[data-action="edit-task"][data-id="old-done"]');await e.submit('#editorForm');assert(e.$('#toast').textContent.includes('À vérifier'));
-    e.fill('#taskStatus','review');await e.submit('#editorForm');await e.click('[data-action="edit-task"][data-id="old-done"]');e.fill('#taskStatus','done');await e.submit('#editorForm');
+    await e.nav('taches');await e.click('[data-action="edit-task"][data-id="old-done"]');await e.click('[data-action="advanced-task"]');await e.submit('#editorForm');assert(e.$('#toast').textContent.includes('À vérifier'));
+    e.fill('#taskStatus','review');await e.submit('#editorForm');await e.click('[data-action="edit-task"][data-id="old-done"]');await e.click('[data-action="advanced-task"]');e.fill('#taskStatus','done');await e.submit('#editorForm');
     assert.equal(e.window.AtelierCore.completedTasks(e.state().projects[0]).length,1);
   }finally{await e.close();}
 });
@@ -116,8 +189,8 @@ test('V3.1 suggestions create one editable task with dependencies and GitHub mis
   const e=await setup(continuityFixture());try{
     assert(e.$('#main').textContent.includes('La suite du projet'));await e.click('[data-action="accept-suggestion"]');assert.equal(e.$('#taskRole').value,'tests');e.fill('#taskTitle','Tests de sauvegarde');await e.submit('#editorForm');
     let p=e.state().projects[0];assert.equal(p.workItems.length,2);assert.deepEqual(p.workItems[1].dependsOn,['program']);assert.equal(e.$('[data-action="accept-suggestion"]'),null);
-    await e.nav('taches');await e.click('[data-action="edit-task"][data-id="program"]');assert.equal(e.$('#taskWorkBranch').value,'feature/sauvegarde');await e.click('[data-action="task-to-transfer"]');assert(e.$('#transferOutput').value.includes('feature/sauvegarde'));assert(e.$('#transferOutput').value.includes('/pull/12'));
-    await e.nav('taches');await e.click('[data-action="edit-task"][data-id="program"]');e.fill('#taskResult','Résultat repris');await e.submit('#editorForm');p=e.state().projects[0];assert.equal(p.workItems[0].status,'review');assert(e.$('#main').textContent.includes('Prérequis non validé'));
+    await e.nav('taches');await e.click('[data-action="edit-task"][data-id="program"]');await e.click('[data-action="advanced-task"]');assert.equal(e.$('#taskWorkBranch').value,'feature/sauvegarde');await e.click('[data-action="task-to-transfer"]');assert(e.$('#transferOutput').value.includes('feature/sauvegarde'));assert(e.$('#transferOutput').value.includes('/pull/12'));
+    await e.nav('taches');await e.click('[data-action="edit-task"][data-id="program"]');await e.click('[data-action="advanced-task"]');e.fill('#taskResult','Résultat repris');await e.submit('#editorForm');p=e.state().projects[0];assert.equal(p.workItems[0].status,'review');assert(e.$('#main').textContent.includes('Prérequis non validé'));
   }finally{await e.close();}
 });
 test('V3.1 delivery plan saves, downloads and survives full backup restore',async()=>{
@@ -143,8 +216,8 @@ test('V3.1 GitHub assistant handles partial reads without writes or false succes
 
 test('V3.2 mode switch preserves data, exposes advanced tools and survives backup restore',async()=>{
   const e=await setup(continuityFixture());let backup;try{
-    assert.equal(e.$('#detailMode').value,'beginner');assert(e.$('.nav-more'));await e.nav('taches');assert(e.$('.task-list'));await e.click('[data-action="edit-task"][data-id="program"]');assert(!e.$('.detail-options').open);assert.equal(e.$('#taskWorkBranch').value,'feature/sauvegarde');await e.submit('#editorForm');assert.equal(e.state().projects[0].workItems[0].workBranch,'feature/sauvegarde');
-    e.fill('#detailMode','advanced','change');assert.equal(e.state().preferences.detailMode,'advanced');assert.equal(e.$('.nav-more'),null);assert(e.$('.board'));await e.click('[data-action="edit-task"][data-id="program"]');assert(e.$('.detail-options').open);await e.click('[data-action="close-dialog"]');
+    assert.equal(e.$('#detailMode').value,'beginner');assert(e.$('.nav-more'));await e.nav('taches');assert(e.$('.task-list'));await e.click('[data-action="edit-task"][data-id="program"]');await e.click('[data-action="advanced-task"]');assert(!e.$('.detail-options').open);assert.equal(e.$('#taskWorkBranch').value,'feature/sauvegarde');await e.submit('#editorForm');assert.equal(e.state().projects[0].workItems[0].workBranch,'feature/sauvegarde');
+    e.fill('#detailMode','advanced','change');assert.equal(e.state().preferences.detailMode,'advanced');assert.equal(e.$('.nav-more'),null);assert(e.$('.board'));await e.click('[data-action="edit-task"][data-id="program"]');await e.click('[data-action="advanced-task"]');assert(e.$('.detail-options').open);await e.click('[data-action="close-dialog"]');
     await e.click('[data-action="export-all"]');backup=JSON.parse(await e.downloads.at(-1).blob.text());
     e.fill('#detailMode','beginner','change');e.fill('#pageJump','postes','change');await tick();assert.equal(e.window.location.hash,'#postes');assert(e.$('.nav-more').open);assert.equal(e.$('#pageJump').value,'postes');
   }finally{await e.close();}
@@ -168,10 +241,10 @@ test('task-only prompt is copied and archived without project context by default
 
 
 test('V3.3 memory registers functions and templates while preserving legacy context',async()=>{
- const e=await setup(legacy());try{await e.nav('memoire');assert(e.$('#main').textContent.includes('Contexte personnel conservé'));await e.click('[data-action="edit-feature"]');e.fill('#featureTitle','Recherche du vocabulaire');e.fill('#featureAreas','carnet vocabulaire');e.fill('#featureChecks','Rechercher un mot');await e.submit('#editorForm');assert.equal(e.state().projects[0].memory.features.length,1);await e.click('[data-action="edit-project"]');e.fill('#projectType','educational');await e.submit('#editorForm');await e.click('[data-action="guided-idea"]');e.fill('#idea','Améliorer le carnet vocabulaire');await e.submit('#editorForm');assert(e.$('#transferOutput').value.includes('progression pédagogique'));assert(!e.$('#transferOutput').value.includes('Contexte personnel conservé'));await e.click('[data-action="edit-task"]');assert(e.$('#editorBody').textContent.includes('Rechercher un mot'));assert(e.$('#taskCriteria').value.includes('Révisions et exercices'));}finally{await e.close();}
+ const e=await setup(legacy());try{await e.nav('memoire');assert(e.$('#main').textContent.includes('Contexte personnel conservé'));await e.click('[data-action="edit-feature"]');e.fill('#featureTitle','Recherche du vocabulaire');e.fill('#featureAreas','carnet vocabulaire');e.fill('#featureChecks','Rechercher un mot');await e.submit('#editorForm');assert.equal(e.state().projects[0].memory.features.length,1);await e.click('[data-action="edit-project"]');e.fill('#projectType','educational');await e.submit('#editorForm');await e.click('[data-action="guided-idea"]');e.fill('#idea','Améliorer le carnet vocabulaire');await e.submit('#editorForm');assert(e.$('#transferOutput').value.includes('progression pédagogique'));assert(!e.$('#transferOutput').value.includes('Contexte personnel conservé'));await e.click('[data-action="edit-task"]');await e.click('[data-action="advanced-task"]');assert(e.$('#editorBody').textContent.includes('Rechercher un mot'));assert(e.$('#taskCriteria').value.includes('Révisions et exercices'));}finally{await e.close();}
 });
 test('V3.3 file response import requires preview and confirmation, then creates only checked followups',async()=>{
- const e=await setup(continuityFixture());try{await e.nav('taches');await e.click('[data-action="edit-task"][data-id="program"]');await e.click('[data-action="import-result"]');const before=e.state();await e.upload('#resultImportFile','reponse.md','## Livrable\nRéponse conservée\n## Fichiers modifiés\n- app.js\n## Tests réalisés\n- Navigation testée\n## Prochaines étapes\n- Revoir les sauvegardes\n- Publier','text/markdown');await e.click('[data-action="preview-result"]');assert.deepEqual(e.state(),before);assert(e.$('#importFiles').value.includes('app.js'));await e.submit('#editorForm');assert(e.$('#toast').textContent.includes('Confirme'));e.$('input[name="nextTask"][value="0"]').checked=true;e.$('input[name="confirmImport"]').checked=true;await e.submit('#editorForm');const p=e.state().projects[0];assert.equal(p.workItems[0].status,'returned');assert.equal(p.workItems.length,2);assert.equal(p.workItems[1].title,'Revoir les sauvegardes');assert.equal(e.window.AtelierCore.completedTasks(p).length,0);assert.equal(e.$('#main').querySelectorAll('script').length,0);}finally{await e.close();}
+ const e=await setup(continuityFixture());try{await e.nav('taches');await e.click('[data-action="edit-task"][data-id="program"]');await e.click('[data-action="advanced-task"]');await e.click('[data-action="import-result"]');const before=e.state();await e.upload('#resultImportFile','reponse.md','## Livrable\nRéponse conservée\n## Fichiers modifiés\n- app.js\n## Tests réalisés\n- Navigation testée\n## Prochaines étapes\n- Revoir les sauvegardes\n- Publier','text/markdown');await e.click('[data-action="preview-result"]');assert.deepEqual(e.state(),before);assert(e.$('#importFiles').value.includes('app.js'));await e.submit('#editorForm');assert(e.$('#toast').textContent.includes('Confirme'));e.$('input[name="nextTask"][value="0"]').checked=true;e.$('input[name="confirmImport"]').checked=true;await e.submit('#editorForm');const p=e.state().projects[0];assert.equal(p.workItems[0].status,'returned');assert.equal(p.workItems.length,2);assert.equal(p.workItems[1].title,'Revoir les sauvegardes');assert.equal(e.window.AtelierCore.completedTasks(p).length,0);assert.equal(e.$('#main').querySelectorAll('script').length,0);}finally{await e.close();}
 });
 test('V3.3 history comparison and snapshot survive backup restore',async()=>{
  const e=await setup(legacy());let backup;try{await e.nav('versions');for(const [version,notes] of [['V0.10','Ancienne base'],['V0.11','Recherche améliorée']]){await e.click('[data-action="record-version"]');e.fill('#historyVersion',version);e.fill('#historyDate',version==='V0.10'?'2026-10-01':'2026-11-01');e.fill('#historyNotes',notes);e.$('input[name="published"]').checked=true;await e.submit('#editorForm');}const releases=e.state().projects[0].releases;e.fill('#versionFrom',releases[0].id,'change');assert(e.$('#main').textContent.includes('Recherche améliorée'));await e.click('[data-action="download-version"][data-id="'+releases[0].id+'"]');assert(JSON.parse(await e.downloads.at(-1).blob.text()).snapshot.context.includes('Contexte personnel'));await e.click('[data-action="export-all"]');backup=JSON.parse(await e.downloads.at(-1).blob.text());}finally{await e.close();}const r=await setup();try{await r.nav('sauvegardes');await r.click('[data-action="import-all"]');await r.upload('#importFile','backup.json',JSON.stringify(backup),'application/json');await r.nav('versions');assert(r.$('#main').textContent.includes('V0.10'));assert.equal(r.state().projects[0].releases.length,2);}finally{await r.close();}
@@ -182,7 +255,7 @@ test('V3.3 coherence audits real stored files and merged PR metadata without wri
 
 
 test('V3.3 regression proofs persist, then reset when the task result changes',async()=>{
- const e=await setup(continuityFixture());try{await e.nav('taches');await e.click('[data-action="edit-task"][data-id="program"]');for(const field of e.window.document.querySelectorAll('select[name^="reg-status-"]')){field.value='passed';const id=field.name.slice('reg-status-'.length);e.$('textarea[name="reg-evidence-'+id+'"]').value='Contrôle réellement observé';}await e.submit('#editorForm');let t=e.state().projects[0].workItems[0];assert(t.regressionChecks.every(r=>r.status==='passed'&&r.evidence));await e.click('[data-action="edit-task"][data-id="program"]');e.fill('#taskResult','Fonction modifiée après contrôle');await e.submit('#editorForm');t=e.state().projects[0].workItems[0];assert.equal(t.status,'review');assert(t.regressionChecks.every(r=>r.status==='todo'&&!r.evidence));}finally{await e.close();}
+ const e=await setup(continuityFixture());try{await e.nav('taches');await e.click('[data-action="edit-task"][data-id="program"]');await e.click('[data-action="advanced-task"]');for(const field of e.window.document.querySelectorAll('select[name^="reg-status-"]')){field.value='passed';const id=field.name.slice('reg-status-'.length);e.$('textarea[name="reg-evidence-'+id+'"]').value='Contrôle réellement observé';}await e.submit('#editorForm');let t=e.state().projects[0].workItems[0];assert(t.regressionChecks.every(r=>r.status==='passed'&&r.evidence));await e.click('[data-action="edit-task"][data-id="program"]');await e.click('[data-action="advanced-task"]');e.fill('#taskResult','Fonction modifiée après contrôle');await e.submit('#editorForm');t=e.state().projects[0].workItems[0];assert.equal(t.status,'review');assert(t.regressionChecks.every(r=>r.status==='todo'&&!r.evidence));}finally{await e.close();}
 });
 
 
